@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+from .coordinator import FonrichHub
+
+async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict:
+    hub: FonrichHub = entry.runtime_data
+    return {
+        "entry": {
+            "title": entry.title,
+            "data": dict(entry.data),
+            "options": dict(entry.options),
+        },
+        "controllers": [
+            {
+                "id": controller.controller_id,
+                "name": controller.name,
+                "slave": controller.slave,
+                "available": hub.available.get(controller.controller_id),
+                "last_error": hub.last_error.get(controller.controller_id),
+            }
+            for controller in hub.controllers
+        ],
+        "scan_intervals": hub.scan_intervals,
+    }

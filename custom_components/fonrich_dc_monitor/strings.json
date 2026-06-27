@@ -1,0 +1,90 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Fonrich DC Monitor verbinden",
+        "description": "HF2211 im Modbus-TCP-Gateway-Modus eintragen. Der HF2211 muss auf Protocol = Modbus stehen.",
+        "data": {
+          "name": "Name",
+          "host": "IP-Adresse / Host",
+          "port": "Port",
+          "timeout": "Timeout in Sekunden",
+          "retries": "Wiederholungen bei Fehler"
+        }
+      },
+      "controllers": {
+        "title": "Controller einrichten",
+        "description": "Bis zu drei Fonrich-Controller können automatisch als eigene Geräte angelegt werden.",
+        "data": {
+          "controller_1_enabled": "Controller 1 aktiv",
+          "controller_1_name": "Controller 1 Name",
+          "controller_1_slave": "Controller 1 Slave-Adresse",
+          "controller_2_enabled": "Controller 2 aktiv",
+          "controller_2_name": "Controller 2 Name",
+          "controller_2_slave": "Controller 2 Slave-Adresse",
+          "controller_3_enabled": "Controller 3 aktiv",
+          "controller_3_name": "Controller 3 Name",
+          "controller_3_slave": "Controller 3 Slave-Adresse"
+        }
+      },
+      "options": {
+        "title": "Abfrageintervalle",
+        "description": "Die Abfragen werden intern nach Kategorie gestaffelt, damit der RS485-Bus nicht auf einmal belastet wird.",
+        "data": {
+          "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
+          "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
+          "scan_power": "Leistung Intervall (Sekunden)",
+          "scan_energy": "Energie/Historie Intervall (Sekunden)",
+          "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
+          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "unknown": "Unbekannter Fehler"
+    },
+    "abort": {
+      "already_configured": "Dieses Gateway ist bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "connection": {
+        "title": "Verbindung",
+        "data": {
+          "name": "Name",
+          "host": "IP-Adresse / Host",
+          "port": "Port",
+          "timeout": "Timeout in Sekunden",
+          "retries": "Wiederholungen bei Fehler"
+        }
+      },
+      "controllers": {
+        "title": "Controller",
+        "data": {
+          "controller_1_enabled": "Controller 1 aktiv",
+          "controller_1_name": "Controller 1 Name",
+          "controller_1_slave": "Controller 1 Slave-Adresse",
+          "controller_2_enabled": "Controller 2 aktiv",
+          "controller_2_name": "Controller 2 Name",
+          "controller_2_slave": "Controller 2 Slave-Adresse",
+          "controller_3_enabled": "Controller 3 aktiv",
+          "controller_3_name": "Controller 3 Name",
+          "controller_3_slave": "Controller 3 Slave-Adresse"
+        }
+      },
+      "polling": {
+        "title": "Abfrageintervalle",
+        "data": {
+          "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
+          "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
+          "scan_power": "Leistung Intervall (Sekunden)",
+          "scan_energy": "Energie/Historie Intervall (Sekunden)",
+          "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
+          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)"
+        }
+      }
+    }
+  }
+}
