@@ -62,41 +62,85 @@ async def _handle_controller_service(hass: HomeAssistant, call: ServiceCall, act
     raise ValueError(f"Fonrich controller not found: {controller_value}")
 
 
-async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register Fonrich card static path and Lovelace resource.
+async def _async_register_frontend(hass: HomeAssistant, retry: int = 0) -> None:
+    """Register Fonrich card static path and Lovelace resource automatically.
 
-    Uses hass.data["lovelace"].resources instead of importing
-    async_get_resource_collection because that helper is not available in all
-    current Home Assistant releases.
+    The static URL is always registered. The Lovelace resource is added only in
+    Lovelace storage mode. Newer Home Assistant versions lazy-load the resource
+    storage, so we wait/retry until it is ready instead of creating too early.
     """
-    if hass.data.get(f"{DOMAIN}_frontend_registered"):
-        return
+    from homeassistant.helpers.event import async_call_later
 
     www_path = Path(__file__).parent / "www"
-    if www_path.exists() and hasattr(hass.http, "async_register_static_paths"):
-        from homeassistant.components.http import StaticPathConfig
-        try:
-            await hass.http.async_register_static_paths([
-                StaticPathConfig(CARD_STATIC_URL, str(www_path), True)
-            ])
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Fonrich static card path already registered or failed: %s", err)
-    elif www_path.exists():
-        try:
-            hass.http.register_static_path(CARD_STATIC_URL, str(www_path), True)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Fonrich static card path already registered or failed: %s", err)
+
+    if not hass.data.get(f"{DOMAIN}_static_registered"):
+        if www_path.exists() and hasattr(hass.http, "async_register_static_paths"):
+            from homeassistant.components.http import StaticPathConfig
+            try:
+                await hass.http.async_register_static_paths([
+                    StaticPathConfig(CARD_STATIC_URL, str(www_path), True)
+                ])
+                _LOGGER.debug("Registered Fonrich static card path: %s -> %s", CARD_STATIC_URL, www_path)
+            except RuntimeError:
+                _LOGGER.debug("Fonrich static card path already registered: %s", CARD_STATIC_URL)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not register Fonrich static card path %s: %s", CARD_STATIC_URL, err)
+        elif www_path.exists():
+            try:
+                hass.http.register_static_path(CARD_STATIC_URL, str(www_path), True)
+                _LOGGER.debug("Registered Fonrich static card path: %s -> %s", CARD_STATIC_URL, www_path)
+            except RuntimeError:
+                _LOGGER.debug("Fonrich static card path already registered: %s", CARD_STATIC_URL)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not register Fonrich static card path %s: %s", CARD_STATIC_URL, err)
+        hass.data[f"{DOMAIN}_static_registered"] = True
+
+    if hass.data.get(f"{DOMAIN}_lovelace_registered"):
+        return
 
     lovelace = hass.data.get("lovelace")
-    resources = getattr(lovelace, "resources", None)
-    resource_mode = getattr(lovelace, "mode", getattr(lovelace, "resource_mode", "storage"))
-    if resources is None or resource_mode == "yaml":
-        _LOGGER.info(
-            "Fonrich card file is available at %s. Automatic Lovelace resource registration is only possible in storage mode.",
+    if lovelace is None:
+        if retry < 24:
+            _LOGGER.debug("Lovelace not ready, retry Fonrich card registration in 5s")
+            async_call_later(hass, 5, lambda _now: hass.async_create_task(_async_register_frontend(hass, retry + 1)))
+        else:
+            _LOGGER.warning("Could not automatically register Fonrich Lovelace cards resource because Lovelace was not ready. The card file is available at %s", CARD_URL)
+        return
+
+    mode = getattr(lovelace, "mode", getattr(lovelace, "resource_mode", "storage"))
+    if mode != "storage":
+        _LOGGER.warning(
+            "Fonrich card file is available at %s but Lovelace is not in storage mode. Automatic resource registration is only possible in storage mode.",
             CARD_URL,
         )
-        hass.data[f"{DOMAIN}_frontend_registered"] = True
         return
+
+    resources = getattr(lovelace, "resources", None)
+    if resources is None:
+        if retry < 24:
+            _LOGGER.debug("Lovelace resources not ready, retry Fonrich card registration in 5s")
+            async_call_later(hass, 5, lambda _now: hass.async_create_task(_async_register_frontend(hass, retry + 1)))
+        else:
+            _LOGGER.warning("Could not automatically register Fonrich Lovelace cards resource because resources were not ready. The card file is available at %s", CARD_URL)
+        return
+
+    # Avoid corrupting .storage/lovelace_resources on HA versions where resources
+    # are lazy-loaded. Wait until loaded; if async_load exists, call it once.
+    loaded = getattr(resources, "loaded", True)
+    if loaded is False:
+        try:
+            if hasattr(resources, "async_load"):
+                await resources.async_load()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Fonrich Lovelace resource async_load not ready: %s", err)
+        loaded = getattr(resources, "loaded", True)
+        if loaded is False:
+            if retry < 24:
+                _LOGGER.debug("Lovelace resources not loaded yet, retry Fonrich card registration in 5s")
+                async_call_later(hass, 5, lambda _now: hass.async_create_task(_async_register_frontend(hass, retry + 1)))
+            else:
+                _LOGGER.warning("Could not automatically register Fonrich Lovelace cards resource because resources never loaded. The card file is available at %s", CARD_URL)
+            return
 
     version = "0.0.0"
     try:
@@ -108,30 +152,35 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
     target_url = f"{CARD_URL}?v={version}"
     try:
-        if hasattr(resources, "async_load"):
-            await resources.async_load()
         items = list(resources.async_items()) if hasattr(resources, "async_items") else []
         existing = [item for item in items if str(item.get("url", "")).split("?")[0] == CARD_URL]
         if existing:
             current = existing[0]
             if current.get("url") != target_url:
                 await resources.async_update_item(current["id"], {"res_type": "module", "url": target_url})
-                _LOGGER.info("Updated Fonrich Lovelace cards resource: %s", target_url)
-            hass.data[f"{DOMAIN}_frontend_registered"] = True
+                _LOGGER.info("Updated Fonrich Lovelace cards resource automatically: %s", target_url)
+            else:
+                _LOGGER.debug("Fonrich Lovelace cards resource already registered: %s", target_url)
+            hass.data[f"{DOMAIN}_lovelace_registered"] = True
             return
+
         await resources.async_create_item({"res_type": "module", "url": target_url})
         _LOGGER.info("Registered Fonrich Lovelace cards resource automatically: %s", target_url)
-        hass.data[f"{DOMAIN}_frontend_registered"] = True
+        hass.data[f"{DOMAIN}_lovelace_registered"] = True
     except Exception as err:  # noqa: BLE001
-        _LOGGER.info(
-            "Fonrich card file is available at %s, but automatic Lovelace resource registration failed: %s",
-            CARD_URL,
-            err,
-        )
+        if retry < 6:
+            _LOGGER.debug("Fonrich Lovelace resource registration failed, retry in 5s: %s", err)
+            async_call_later(hass, 5, lambda _now: hass.async_create_task(_async_register_frontend(hass, retry + 1)))
+        else:
+            _LOGGER.warning(
+                "Could not automatically register Fonrich Lovelace cards resource. The card file is available at %s. Error: %s",
+                CARD_URL,
+                err,
+            )
 
 
 async def _async_register_frontend_when_ready(hass: HomeAssistant) -> None:
-    """Register frontend once Lovelace is initialized."""
+    """Register frontend once Home Assistant has started."""
     from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
     from homeassistant.core import CoreState
 
