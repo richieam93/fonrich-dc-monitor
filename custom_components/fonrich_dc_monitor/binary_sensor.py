@@ -21,7 +21,7 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
     def __init__(self, hub: FonrichHub, controller, description: BinaryDescription) -> None:
         super().__init__(hub, controller, description.key)
         self.description = description
-        self._attr_unique_id = f"{controller.controller_id}_{description.key}"
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_{description.key}"
         self._attr_name = description.name
         self._attr_device_class = description.device_class
 

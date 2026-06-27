@@ -20,6 +20,24 @@ from .const import (
     DEFAULT_SCAN_BASE,
     DEFAULT_SCAN_ENERGY,
     DEFAULT_SCAN_POWER,
+    CONF_SCAN_HISTORY,
+    CONF_INTER_REQUEST_DELAY_MS,
+    CONF_INTER_CONTROLLER_DELAY_MS,
+    CONF_STARTUP_STAGGER_SECONDS,
+    CONF_MAX_REGISTERS_PER_REQUEST,
+    CONF_ENABLE_POWER,
+    CONF_ENABLE_ENERGY,
+    CONF_ENABLE_HISTORY,
+    CONF_ENABLE_ALARM_MASKS,
+    DEFAULT_SCAN_HISTORY,
+    DEFAULT_INTER_REQUEST_DELAY_MS,
+    DEFAULT_INTER_CONTROLLER_DELAY_MS,
+    DEFAULT_STARTUP_STAGGER_SECONDS,
+    DEFAULT_MAX_REGISTERS_PER_REQUEST,
+    DEFAULT_ENABLE_POWER,
+    DEFAULT_ENABLE_ENERGY,
+    DEFAULT_ENABLE_HISTORY,
+    DEFAULT_ENABLE_ALARM_MASKS,
     DEFAULT_TIMEOUT,
 )
 from .modbus_client import AsyncModbusTcpGateway, CallbackRegistry, FonrichModbusError
@@ -43,8 +61,10 @@ class FonrichHub:
         client: AsyncModbusTcpGateway,
         controllers: list[ControllerConfig],
         options: dict,
+        gateway_uid: str = "fonrich",
     ) -> None:
         self.hass = hass
+        self.gateway_uid = gateway_uid
         self.client = client
         self.controllers = [controller for controller in controllers if controller.enabled]
         self.options = options
@@ -63,16 +83,38 @@ class FonrichHub:
             "base": int(self.options.get(CONF_SCAN_BASE, DEFAULT_SCAN_BASE)),
             "power": int(self.options.get(CONF_SCAN_POWER, DEFAULT_SCAN_POWER)),
             "energy": int(self.options.get(CONF_SCAN_ENERGY, DEFAULT_SCAN_ENERGY)),
+            "history": int(self.options.get(CONF_SCAN_HISTORY, DEFAULT_SCAN_HISTORY)),
             "arc_intensity": int(self.options.get(CONF_SCAN_ARC_INTENSITY, DEFAULT_SCAN_ARC_INTENSITY)),
-            "history": max(60, int(self.options.get(CONF_SCAN_ENERGY, DEFAULT_SCAN_ENERGY))),
         }
+
+    @property
+    def inter_request_delay(self) -> float:
+        return int(self.options.get(CONF_INTER_REQUEST_DELAY_MS, DEFAULT_INTER_REQUEST_DELAY_MS)) / 1000
+
+    @property
+    def inter_controller_delay(self) -> float:
+        return int(self.options.get(CONF_INTER_CONTROLLER_DELAY_MS, DEFAULT_INTER_CONTROLLER_DELAY_MS)) / 1000
+
+    @property
+    def max_registers_per_request(self) -> int:
+        return int(self.options.get(CONF_MAX_REGISTERS_PER_REQUEST, DEFAULT_MAX_REGISTERS_PER_REQUEST))
+
+    def enabled_categories(self) -> list[str]:
+        categories = ["alarm", "base"]
+        if self.options.get(CONF_ENABLE_POWER, DEFAULT_ENABLE_POWER):
+            categories.append("power")
+        if self.options.get(CONF_ENABLE_ENERGY, DEFAULT_ENABLE_ENERGY):
+            categories.append("energy")
+        if self.options.get(CONF_ENABLE_HISTORY, DEFAULT_ENABLE_HISTORY):
+            categories.append("history")
+        if self.options.get(CONF_ENABLE_ARC_INTENSITY, False):
+            categories.append("arc_intensity")
+        return categories
 
     async def start(self) -> None:
         self._stopped.clear()
-        for category in ["alarm", "base", "power", "energy", "history"]:
+        for category in self.enabled_categories():
             self._tasks.append(self.hass.async_create_task(self._poll_loop(category)))
-        if self.options.get(CONF_ENABLE_ARC_INTENSITY, False):
-            self._tasks.append(self.hass.async_create_task(self._poll_loop("arc_intensity")))
         await self.async_refresh_all()
 
     async def stop(self) -> None:
@@ -84,14 +126,14 @@ class FonrichHub:
         self._tasks.clear()
 
     async def async_refresh_all(self) -> None:
-        for category in ["alarm", "base", "power", "energy", "history"]:
+        for category in self.enabled_categories():
             await self._poll_category(category)
-        if self.options.get(CONF_ENABLE_ARC_INTENSITY, False):
-            await self._poll_category("arc_intensity")
 
     async def _poll_loop(self, category: str) -> None:
         # Small stagger between categories after restart.
-        initial_delay = {"alarm": 1, "base": 5, "power": 11, "energy": 17, "history": 23, "arc_intensity": 29}.get(category, 3)
+        stagger = int(self.options.get(CONF_STARTUP_STAGGER_SECONDS, DEFAULT_STARTUP_STAGGER_SECONDS))
+        order = {"alarm": 0, "base": 1, "power": 2, "energy": 3, "history": 4, "arc_intensity": 5}
+        initial_delay = 1 + order.get(category, 0) * stagger
         try:
             await asyncio.wait_for(self._stopped.wait(), timeout=initial_delay)
             return
@@ -119,7 +161,7 @@ class FonrichHub:
                 self.available[controller.controller_id] = False
                 self.last_error[controller.controller_id] = str(exc)
                 _LOGGER.debug("Polling %s %s failed: %s", controller.name, category, exc)
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(self.inter_controller_delay)
         self.callbacks.notify()
 
     async def _poll_controller_category(
@@ -131,7 +173,11 @@ class FonrichHub:
         # Read contiguous register groups rather than one request per entity.
         groups: list[list[RegisterDescription]] = []
         for desc in sorted(descriptions, key=lambda item: item.address):
-            if not groups or desc.address != groups[-1][-1].address + 1:
+            if (
+                not groups
+                or desc.address != groups[-1][-1].address + 1
+                or (desc.address - groups[-1][0].address + 1) > self.max_registers_per_request
+            ):
                 groups.append([desc])
             else:
                 groups[-1].append(desc)
@@ -144,7 +190,7 @@ class FonrichHub:
                 raw_value = values[desc.address - start]
                 self.raw[controller.controller_id][desc.key] = raw_value
                 self.data[controller.controller_id][desc.key] = self._decode(raw_value, desc)
-            await asyncio.sleep(0.08)
+            await asyncio.sleep(self.inter_request_delay)
 
     def _decode(self, raw_value: int, desc: RegisterDescription) -> int | float:
         if desc.data_type == "int16" and raw_value >= 32768:
@@ -160,6 +206,25 @@ class FonrichHub:
     def get_raw_value(self, controller_id: str, key: str) -> int | None:
         value = self.raw.get(controller_id, {}).get(key)
         return int(value) if value is not None else None
+
+    def controller_by_id_or_slave(self, value: str | int) -> ControllerConfig | None:
+        value_str = str(value).lower()
+        for controller in self.controllers:
+            if value_str in {controller.controller_id.lower(), str(controller.slave), controller.name.lower()}:
+                return controller
+        return None
+
+    async def async_clear_alarm_trip(self, controller: ControllerConfig) -> None:
+        from .const import REGISTER_CLEAR_ALARM_TRIP
+        await self.write_register(controller, REGISTER_CLEAR_ALARM_TRIP, 1)
+
+    async def async_clear_arc_history(self, controller: ControllerConfig) -> None:
+        from .const import REGISTER_CLEAR_ARC_HISTORY
+        await self.write_register(controller, REGISTER_CLEAR_ARC_HISTORY, 1)
+
+    async def async_arc_selftest(self, controller: ControllerConfig) -> None:
+        from .const import REGISTER_ARC_SELFTEST
+        await self.write_register(controller, REGISTER_ARC_SELFTEST, 1)
 
     async def write_register(self, controller: ControllerConfig, address: int, value: int) -> None:
         await self.client.write_single_register(controller.slave, address, value)

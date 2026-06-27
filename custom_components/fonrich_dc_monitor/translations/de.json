@@ -3,45 +3,54 @@
     "step": {
       "user": {
         "title": "Fonrich DC Monitor verbinden",
-        "description": "HF2211 im Modbus-TCP-Gateway-Modus eintragen. Der HF2211 muss auf Protocol = Modbus stehen.",
+        "description": "HF2211 im Modbus-TCP-Gateway-Modus eintragen. Dieses Gateway wird beim Weiterklicken per TCP geprüft. Du kannst mehrere Gateways hinzufügen, indem du die Integration mehrmals einrichtest.",
         "data": {
           "name": "Name",
           "host": "IP-Adresse / Host",
           "port": "Port",
           "timeout": "Timeout in Sekunden",
-          "retries": "Wiederholungen bei Fehler"
+          "retries": "Wiederholungen bei Fehler",
+          "baudrate": "Bus-Baudrate am HF2211/Fonrich (Info, z. B. 9600 oder 19200)"
         }
       },
       "controllers": {
-        "title": "Controller einrichten",
-        "description": "Bis zu drei Fonrich-Controller können automatisch als eigene Geräte angelegt werden.",
+        "title": "Controller-Adressen",
+        "description": "Slave-Adressen als Zahlen eintragen, getrennt mit Komma/Leerzeichen/Zeilenumbruch. Beispiel: 240,241,242. Es können beliebig viele Controller pro Gateway hinzugefügt werden. Wenn Online-Prüfung aktiv ist, muss jeder Controller auf Register 260 antworten. Offline: {offline}",
         "data": {
-          "controller_1_enabled": "Controller 1 aktiv",
-          "controller_1_name": "Controller 1 Name",
-          "controller_1_slave": "Controller 1 Slave-Adresse",
-          "controller_2_enabled": "Controller 2 aktiv",
-          "controller_2_name": "Controller 2 Name",
-          "controller_2_slave": "Controller 2 Slave-Adresse",
-          "controller_3_enabled": "Controller 3 aktiv",
-          "controller_3_name": "Controller 3 Name",
-          "controller_3_slave": "Controller 3 Slave-Adresse"
+          "controller_slaves": "Slave-Adressen als Zahlen",
+          "controller_names": "Controller-Namen optional, mit Komma getrennt",
+          "require_online": "Beim Hinzufügen prüfen, ob alle Controller online sind"
         }
       },
       "options": {
-        "title": "Abfrageintervalle",
-        "description": "Die Abfragen werden intern nach Kategorie gestaffelt, damit der RS485-Bus nicht auf einmal belastet wird.",
+        "title": "Abfrage und Funktionen",
+        "description": "Intervalle, optionale Registergruppen und Bus-Schonung einstellen.",
         "data": {
           "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
           "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
+          "enable_power": "Leistungsregister aktivieren",
           "scan_power": "Leistung Intervall (Sekunden)",
-          "scan_energy": "Energie/Historie Intervall (Sekunden)",
+          "enable_energy": "Energieregister aktivieren",
+          "scan_energy": "Energie Intervall (Sekunden)",
+          "enable_history": "Lichtbogen-Historie aktivieren",
+          "scan_history": "Historie Intervall (Sekunden)",
           "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
-          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)"
+          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)",
+          "enable_alarm_masks": "Zusätzliche Alarmmasken aktivieren",
+          "enable_buttons": "Buttons für Reset/Selbsttest erstellen",
+          "inter_request_delay_ms": "Pause zwischen Modbus-Requests (Millisekunden)",
+          "inter_controller_delay_ms": "Pause zwischen Controllern (Millisekunden)",
+          "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
+          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen",
+      "cannot_connect": "Gateway ist nicht erreichbar",
+      "controllers_offline": "Mindestens ein Controller antwortet nicht. Siehe Offline-Liste im Text.",
+      "invalid_slave": "Ungültige Slave-Adresse. Erlaubt sind Zahlen von 1 bis 247.",
+      "duplicate_slave": "Eine Slave-Adresse wurde doppelt eingetragen.",
+      "no_slaves": "Bitte mindestens eine Slave-Adresse eintragen.",
       "unknown": "Unbekannter Fehler"
     },
     "abort": {
@@ -52,38 +61,46 @@
     "step": {
       "connection": {
         "title": "Verbindung",
+        "description": "Gateway-IP/Port ändern. Das Gateway wird beim Weiterklicken per TCP geprüft.",
         "data": {
           "name": "Name",
           "host": "IP-Adresse / Host",
           "port": "Port",
           "timeout": "Timeout in Sekunden",
-          "retries": "Wiederholungen bei Fehler"
+          "retries": "Wiederholungen bei Fehler",
+          "baudrate": "Bus-Baudrate am HF2211/Fonrich (Info, z. B. 9600 oder 19200)"
         }
       },
       "controllers": {
-        "title": "Controller",
+        "title": "Controller-Adressen",
+        "description": "Slave-Adressen als Zahlen eintragen, z. B. 240,241,242. Es können beliebig viele Controller pro Gateway hinzugefügt werden. Offline: {offline}",
         "data": {
-          "controller_1_enabled": "Controller 1 aktiv",
-          "controller_1_name": "Controller 1 Name",
-          "controller_1_slave": "Controller 1 Slave-Adresse",
-          "controller_2_enabled": "Controller 2 aktiv",
-          "controller_2_name": "Controller 2 Name",
-          "controller_2_slave": "Controller 2 Slave-Adresse",
-          "controller_3_enabled": "Controller 3 aktiv",
-          "controller_3_name": "Controller 3 Name",
-          "controller_3_slave": "Controller 3 Slave-Adresse"
+          "controller_slaves": "Slave-Adressen als Zahlen",
+          "controller_names": "Controller-Namen optional, mit Komma getrennt",
+          "require_online": "Beim Speichern prüfen, ob alle Controller online sind"
         }
       },
       "polling": {
-        "title": "Abfrageintervalle",
+        "title": "Abfrage und Funktionen",
         "data": {
           "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
           "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
+          "enable_power": "Leistungsregister aktivieren",
           "scan_power": "Leistung Intervall (Sekunden)",
-          "scan_energy": "Energie/Historie Intervall (Sekunden)",
+          "enable_energy": "Energieregister aktivieren",
+          "scan_energy": "Energie Intervall (Sekunden)",
+          "enable_history": "Lichtbogen-Historie aktivieren",
+          "scan_history": "Historie Intervall (Sekunden)",
           "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
-          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)"
-        }
+          "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)",
+          "enable_alarm_masks": "Zusätzliche Alarmmasken aktivieren",
+          "enable_buttons": "Buttons für Reset/Selbsttest erstellen",
+          "inter_request_delay_ms": "Pause zwischen Modbus-Requests (Millisekunden)",
+          "inter_controller_delay_ms": "Pause zwischen Controllern (Millisekunden)",
+          "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
+          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
+        },
+        "description": "Intervalle, optionale Registergruppen und Bus-Schonung einstellen."
       }
     }
   }

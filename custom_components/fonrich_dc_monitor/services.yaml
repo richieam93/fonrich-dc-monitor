@@ -1,0 +1,37 @@
+refresh_now:
+  name: Werte sofort aktualisieren
+  description: Fragt alle aktivierten Fonrich-Registerkategorien sofort ab.
+
+clear_alarm_trip:
+  name: Alarm/Trip Status löschen
+  description: Schreibt 1 auf Register 3074 des gewählten Controllers. Erst nach DC-Prüfung verwenden.
+  fields:
+    controller:
+      name: Controller
+      description: Controller-ID, Slave-Adresse oder Name, z. B. v1, 240 oder V1 / Kasten 1.
+      required: true
+      example: v1
+      selector:
+        text:
+
+clear_arc_history:
+  name: Lichtbogen-Historie löschen
+  description: Schreibt 1 auf Register 3073 des gewählten Controllers.
+  fields:
+    controller:
+      name: Controller
+      required: true
+      example: v1
+      selector:
+        text:
+
+arc_selftest:
+  name: Lichtbogen-Selbsttest starten
+  description: Schreibt 1 auf Register 3077 des gewählten Controllers.
+  fields:
+    controller:
+      name: Controller
+      required: true
+      example: v1
+      selector:
+        text:
