@@ -1,10 +1,10 @@
 # Fonrich DC Monitor
 
-Version: `0.6.2`
+Version: `0.6.5`
 
 Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
 
-## Neu in v0.6.2
+## Neu in v0.6.5
 
 - Neues **Sensor-Profil** in Einrichtung und Optionen:
   - `production`: nur die wichtigen Produktionswerte
@@ -15,7 +15,8 @@ Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monit
 - Einheitlichere Kanalnamen:
   - `Kanal 01 - Dach Ost String 1 Strom`
   - `Kanal 01 - Dach Ost String 1 Leistung`
-- Dashboard-Karten wurden auf Produktion angepasst:
+- Dashboard-Karten wurden auf Produktion angepasst und um eine moderne Karte erweitert:
+  - `Fonrich Modern`
   - `Fonrich Produktion`
   - `Fonrich Controller Produktion`
   - `Fonrich String-Leistung`
@@ -85,13 +86,13 @@ Für die bekannte Anlage empfohlen:
 Die Integration bringt diese Datei mit:
 
 ```text
-custom_components/fonrich_dc_monitor/www/fonrich-dc-monitor-cards.js
+custom_components/fonrich_dc_monitor/www/fonrich-cards.js
 ```
 
 Die Integration versucht die Lovelace-Ressource automatisch zu registrieren:
 
 ```text
-/fonrich_dc_monitor/fonrich-dc-monitor-cards.js
+/fonrich_dc_monitor/fonrich-cards.js
 ```
 
 Normaler Ablauf nach Installation oder Update:
@@ -101,7 +102,8 @@ Normaler Ablauf nach Installation oder Update:
 3. Karte hinzufügen.
 4. Im Visual Editor nach `Fonrich` suchen.
 5. Eine dieser Karten auswählen:
-   - `Fonrich Produktion`
+   - `Fonrich Modern`
+  - `Fonrich Produktion`
    - `Fonrich Controller Produktion`
    - `Fonrich String-Leistung`
    - `Fonrich Energie`
@@ -137,14 +139,39 @@ Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestell
 Lichtbogen-/Trip-Alarme sind sicherheitsrelevant. Vor dem Quittieren immer DC-seitig prüfen lassen.
 
 
-## 0.6.2
+
+## 0.6.5
+
+- Neue moderne Karte `Fonrich Modern` hinzugefügt.
+- Zeigt Gesamtleistung, Gesamtstrom, aktive Strings, Controller-Kacheln und String-Kacheln.
+- Karte ist im Visual Editor auswählbar als `Fonrich Modern`.
+
+## 0.6.3
 
 Fix: SensorEntityDescription compatibility for newer Home Assistant versions.
 
 
-## v0.6.2
+## v0.6.3
 
 - Lovelace-Karten werden robuster automatisch registriert.
-- Die Integration wartet jetzt, bis Home Assistants Lovelace-Resource-Storage geladen ist, bevor `/fonrich_dc_monitor/fonrich-dc-monitor-cards.js` eingetragen wird.
+- Die Integration wartet jetzt, bis Home Assistants Lovelace-Resource-Storage geladen ist, bevor `/fonrich_dc_monitor/fonrich-cards.js` eingetragen wird.
 - Kein manueller Ressourcen-Eintrag nötig, solange Lovelace im Storage/UI-Modus läuft.
 - Im YAML-Lovelace-Modus kann Home Assistant Ressourcen nicht automatisch speichern; dort muss die Resource weiterhin in YAML stehen.
+
+## Version 0.6.3
+
+Fix für Lovelace-Karten:
+
+- Custom elements werden nur noch registriert, wenn sie noch nicht existieren.
+- Dadurch kein Fehler mehr bei doppelt geladener Ressource wie `fonrich-universal-card-editor has already been used`.
+- `window.customCards` wird ohne Duplikate befüllt, damit die Karten im Visual Editor erscheinen.
+
+Nach dem Update bitte alte doppelte Ressourcen entfernen, falls mehr als eine Fonrich-Ressource eingetragen ist, danach Home Assistant neu starten und den Browser hart neu laden.
+
+
+### v0.6.5
+
+- Lovelace-Ressource nutzt jetzt eine stabile URL ohne Versions-Query: `/fonrich_dc_monitor/fonrich-cards.js`.
+- Alte Ressourcen wie `/fonrich_dc_monitor/fonrich-dc-monitor-cards.js?v=...` werden automatisch auf die stabile URL migriert.
+- Doppelte alte Fonrich-Ressourcen werden, wenn möglich, automatisch entfernt.
+- Karten erhalten eindeutigere Namen im Visual Editor, z. B. `Fonrich Modern Produktion` und `Fonrich String Leistung`.

@@ -30,9 +30,10 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 
-CARD_URL = "/fonrich_dc_monitor/fonrich-dc-monitor-cards.js"
+CARD_URL = "/fonrich_dc_monitor/fonrich-cards.js"
+OLD_CARD_URLS = ["/fonrich_dc_monitor/fonrich-dc-monitor-cards.js"]
 CARD_STATIC_URL = "/fonrich_dc_monitor"
-CARD_FILE = "fonrich-dc-monitor-cards.js"
+CARD_FILE = "fonrich-cards.js"
 
 SERVICE_REFRESH_NOW = "refresh_now"
 SERVICE_CLEAR_ALARM_TRIP = "clear_alarm_trip"
@@ -142,25 +143,34 @@ async def _async_register_frontend(hass: HomeAssistant, retry: int = 0) -> None:
                 _LOGGER.warning("Could not automatically register Fonrich Lovelace cards resource because resources never loaded. The card file is available at %s", CARD_URL)
             return
 
-    version = "0.0.0"
-    try:
-        import json
-        manifest = json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8"))
-        version = str(manifest.get("version", version))
-    except Exception:  # noqa: BLE001
-        pass
-
-    target_url = f"{CARD_URL}?v={version}"
+    # Use a stable resource URL without ?v=. Home Assistant keeps the resource
+    # across updates, so versioned query strings can leave old entries behind.
+    # Existing old/versioned Fonrich resources are migrated to the stable URL.
+    target_url = CARD_URL
+    known_urls = [CARD_URL, *OLD_CARD_URLS]
     try:
         items = list(resources.async_items()) if hasattr(resources, "async_items") else []
-        existing = [item for item in items if str(item.get("url", "")).split("?")[0] == CARD_URL]
+        existing = [
+            item for item in items
+            if str(item.get("url", "")).split("?")[0] in known_urls
+        ]
         if existing:
             current = existing[0]
-            if current.get("url") != target_url:
+            if current.get("url") != target_url or current.get("res_type") != "module":
                 await resources.async_update_item(current["id"], {"res_type": "module", "url": target_url})
                 _LOGGER.info("Updated Fonrich Lovelace cards resource automatically: %s", target_url)
             else:
                 _LOGGER.debug("Fonrich Lovelace cards resource already registered: %s", target_url)
+
+            # Remove duplicate old resources when Home Assistant exposes delete support.
+            if hasattr(resources, "async_delete_item"):
+                for duplicate in existing[1:]:
+                    try:
+                        await resources.async_delete_item(duplicate["id"])
+                        _LOGGER.info("Removed duplicate Fonrich Lovelace cards resource: %s", duplicate.get("url"))
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.debug("Could not remove duplicate Fonrich Lovelace resource %s: %s", duplicate.get("url"), err)
+
             hass.data[f"{DOMAIN}_lovelace_registered"] = True
             return
 
