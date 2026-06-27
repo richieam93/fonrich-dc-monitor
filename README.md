@@ -1,8 +1,13 @@
 # Fonrich DC Monitor
 
-Version: `0.6.5`
+Version: `0.6.6`
 
 Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
+
+## Neu in v0.6.6
+
+- Fix: Lovelace cards can now be loaded more than once without CustomElementRegistry constructor errors.
+- Fix: Compatibility card alias uses a safe wrapper class.
 
 ## Neu in v0.6.5
 
@@ -139,6 +144,10 @@ Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestell
 Lichtbogen-/Trip-Alarme sind sicherheitsrelevant. Vor dem Quittieren immer DC-seitig prüfen lassen.
 
 
+
+## 0.6.6
+
+Fix: Prevent duplicate CustomElementRegistry constructor registration errors when Home Assistant loads the card JavaScript twice.
 
 ## 0.6.5
 

@@ -299,8 +299,26 @@ class FonrichUniversalCardEditor extends HTMLElement {
   _changed(changes){ this._config={...this._config,...changes}; this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:this._config},bubbles:true,composed:true})); }
 }
 function defineFonrichElement(name, cls) {
-  if (!customElements.get(name)) {
+  if (customElements.get(name)) return;
+
+  try {
     customElements.define(name, cls);
+  } catch (err) {
+    // Home Assistant can load the same resource twice or define compatibility
+    // aliases. The browser does not allow the same constructor to be registered
+    // under two names, so use a tiny wrapper class for aliases.
+    const message = String((err && err.message) || err || '');
+    if (message.includes('constructor') || message.includes('already been used')) {
+      try {
+        const WrappedFonrichElement = class extends cls {};
+        customElements.define(name, WrappedFonrichElement);
+        return;
+      } catch (wrappedErr) {
+        console.warn(`Fonrich card ${name} could not be registered`, wrappedErr);
+        return;
+      }
+    }
+    console.warn(`Fonrich card ${name} could not be registered`, err);
   }
 }
 
@@ -337,4 +355,4 @@ for (const card of fonrichCards) {
   }
 }
 window.dispatchEvent(new Event('fonrich-cards-loaded'));
-console.info('Fonrich DC Monitor cards loaded from stable resource URL');
+console.info('Fonrich DC Monitor cards loaded from stable resource URL v0.6.6');
