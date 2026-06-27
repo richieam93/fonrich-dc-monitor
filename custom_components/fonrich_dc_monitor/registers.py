@@ -44,7 +44,7 @@ BASE_REGISTERS: Final[list[RegisterDescription]] = [
 
 CURRENT_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription(f"ch{ch}_current", f"Kanal {ch} Strom", 267 + ch, "base", "int16", 0.001, 3, "A", "current", "measurement")
-    for ch in range(1, 9)
+    for ch in range(1, 25)
 ]
 
 ALARM_REGISTERS: Final[list[RegisterDescription]] = [
@@ -53,23 +53,23 @@ ALARM_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription("trip_status_3", "Trip Status 3", 300, "alarm", "uint16"),
     RegisterDescription("alarm_status_1", "Alarm Status 1", 301, "alarm", "uint16"),
     RegisterDescription("alarm_status_2", "Alarm Status 2", 302, "alarm", "uint16"),
-    RegisterDescription("arc_alarm_ch_1_8", "Kanal 1-8 Lichtbogen Alarm Maske", 304, "alarm", "uint16"),
+    RegisterDescription("arc_alarm_ch_1_8", "Kanal 1-16 Lichtbogen Alarm Maske", 304, "alarm", "uint16"),
     RegisterDescription("bus_arc_history_count", "Bus Lichtbogen Historie Anzahl", 306, "history", "uint16", 1, 0, None, None, "measurement"),
 ]
 
 HISTORY_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription(f"ch{ch}_arc_history_count", f"Kanal {ch} Lichtbogen Historie Anzahl", 306 + ch, "history", "uint16", 1, 0, None, None, "measurement")
-    for ch in range(1, 9)
+    for ch in range(1, 25)
 ]
 
 MASK_REGISTERS: Final[list[RegisterDescription]] = [
-    RegisterDescription("reverse_current_alarm_mask", "Kanal 1-8 Rueckstrom Alarm Maske", 331, "alarm", "uint16"),
-    RegisterDescription("no_current_alarm_mask", "Kanal 1-8 Kein Strom Alarm Maske", 333, "alarm", "uint16"),
-    RegisterDescription("undercurrent_alarm_mask", "Kanal 1-8 Unterstrom Alarm Maske", 335, "alarm", "uint16"),
-    RegisterDescription("overcurrent_alarm_mask", "Kanal 1-8 Ueberstrom Alarm Maske", 337, "alarm", "uint16"),
-    RegisterDescription("current_low_alarm_mask", "Kanal 1-8 Strom zu niedrig Alarm Maske", 339, "alarm", "uint16"),
-    RegisterDescription("current_high_alarm_mask", "Kanal 1-8 Strom zu hoch Alarm Maske", 341, "alarm", "uint16"),
-    RegisterDescription("arc_selfcheck_fail_mask", "Kanal 1-8 Lichtbogen Selbsttest Fehler Maske", 343, "alarm", "uint16"),
+    RegisterDescription("reverse_current_alarm_mask", "Kanal 1-16 Rueckstrom Alarm Maske", 331, "alarm", "uint16"),
+    RegisterDescription("no_current_alarm_mask", "Kanal 1-16 Kein Strom Alarm Maske", 333, "alarm", "uint16"),
+    RegisterDescription("undercurrent_alarm_mask", "Kanal 1-16 Unterstrom Alarm Maske", 335, "alarm", "uint16"),
+    RegisterDescription("overcurrent_alarm_mask", "Kanal 1-16 Ueberstrom Alarm Maske", 337, "alarm", "uint16"),
+    RegisterDescription("current_low_alarm_mask", "Kanal 1-16 Strom zu niedrig Alarm Maske", 339, "alarm", "uint16"),
+    RegisterDescription("current_high_alarm_mask", "Kanal 1-16 Strom zu hoch Alarm Maske", 341, "alarm", "uint16"),
+    RegisterDescription("arc_selfcheck_fail_mask", "Kanal 1-16 Lichtbogen Selbsttest Fehler Maske", 343, "alarm", "uint16"),
 ]
 
 POWER_REGISTERS: Final[list[RegisterDescription]] = [
@@ -77,14 +77,14 @@ POWER_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription("average_power_direct", "Durchschnitt Leistung direkt", 513, "power", "uint16", 1, 0, "W", "power", "measurement"),
 ] + [
     RegisterDescription(f"ch{ch}_power_direct", f"Kanal {ch} Leistung direkt", 513 + ch, "power", "uint16", 1, 0, "W", "power", "measurement")
-    for ch in range(1, 9)
+    for ch in range(1, 25)
 ]
 
 ENERGY_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription("total_energy_high_word", "Total Energie High Word", 538, "energy", "uint16", 1, 0, "Wh", None, "measurement"),
     RegisterDescription("total_energy_low_word", "Total Energie Low Word", 539, "energy", "uint16", 1, 0, "Wh", None, "measurement"),
 ]
-for ch in range(1, 9):
+for ch in range(1, 25):
     ENERGY_REGISTERS.extend([
         RegisterDescription(f"ch{ch}_energy_high_word", f"Kanal {ch} Energie High Word", 538 + ch * 2, "energy", "uint16", 1, 0, "Wh", None, "measurement"),
         RegisterDescription(f"ch{ch}_energy_low_word", f"Kanal {ch} Energie Low Word", 539 + ch * 2, "energy", "uint16", 1, 0, "Wh", None, "measurement"),
@@ -96,7 +96,7 @@ for base, suffix, title in [
     (616, "arc_intensity_max", "Lichtbogen Intensitaet Max"),
     (640, "arc_intensity_10min", "Lichtbogen Intensitaet 10min"),
 ]:
-    for ch in range(1, 9):
+    for ch in range(1, 25):
         ARC_INTENSITY_REGISTERS.append(
             RegisterDescription(f"ch{ch}_{suffix}", f"Kanal {ch} {title}", base + ch - 1, "arc_intensity", "int16", 1, 0, None, None, "measurement")
         )
@@ -131,7 +131,7 @@ BINARY_DESCRIPTIONS: Final[list[BinaryDescription]] = [
     BinaryDescription("channel_current_low_summary_alarm", "Kanal Strom zu niedrig Sammelalarm", "alarm_status_1", 8192),
     BinaryDescription("channel_current_high_summary_alarm", "Kanal Strom zu hoch Sammelalarm", "alarm_status_1", 16384),
 ]
-for ch in range(1, 9):
+for ch in range(1, 17):
     bit = 1 << (ch - 1)
     BINARY_DESCRIPTIONS.extend([
         BinaryDescription(f"ch{ch}_arc_alarm", f"Kanal {ch} Lichtbogen Alarm", "arc_alarm_ch_1_8", bit),

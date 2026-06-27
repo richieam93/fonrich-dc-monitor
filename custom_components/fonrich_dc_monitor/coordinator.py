@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
@@ -44,6 +45,12 @@ from .modbus_client import AsyncModbusTcpGateway, CallbackRegistry, FonrichModbu
 from .registers import ALL_SENSOR_REGISTERS, RegisterDescription
 
 _LOGGER = logging.getLogger(__name__)
+
+_CHANNEL_RE = re.compile(r"^ch(\d+)_")
+
+def _channel_from_key(key: str) -> int | None:
+    match = _CHANNEL_RE.match(key)
+    return int(match.group(1)) if match else None
 
 @dataclass(frozen=True)
 class ControllerConfig:
@@ -163,8 +170,15 @@ class FonrichHub:
         if not descriptions:
             return
         for controller in self.controllers:
+            controller_descriptions = [
+                desc
+                for desc in descriptions
+                if (_channel_from_key(desc.key) is None or _channel_from_key(desc.key) <= int(controller.channel_count))
+            ]
+            if not controller_descriptions:
+                continue
             try:
-                await self._poll_controller_category(controller, category, descriptions)
+                await self._poll_controller_category(controller, category, controller_descriptions)
                 self.available[controller.controller_id] = True
                 self.last_error[controller.controller_id] = None
             except Exception as exc:  # noqa: BLE001

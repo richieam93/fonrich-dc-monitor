@@ -43,10 +43,12 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
     def _name_with_channel_description(self, name: str) -> str:
         if self.channel is None:
             return name
-        channel_description = self.controller.channel_description(self.channel)
+        suffix = re.sub(rf"^Kanal\s+{self.channel}\s*", "", name).strip()
+        base_name = f"Kanal {self.channel:02d}" if not suffix else f"Kanal {self.channel:02d} {suffix}"
+        channel_description = self.controller.channel_description(self.channel).strip()
         if not channel_description or channel_description.lower() == f"kanal {self.channel}".lower():
-            return name
-        return f"{name} - {channel_description}"
+            return base_name
+        return f"{base_name} - {channel_description}"
 
     @property
     def is_on(self) -> bool | None:

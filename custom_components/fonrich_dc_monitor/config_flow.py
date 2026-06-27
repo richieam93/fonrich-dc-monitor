@@ -19,6 +19,7 @@ from .const import (
     CONF_HOST,
     CONF_PORT,
     CONF_RETRIES,
+    CONF_PROTOCOL,
     CONF_SCAN_ALARM,
     CONF_SCAN_ARC_INTENSITY,
     CONF_SCAN_BASE,
@@ -32,6 +33,8 @@ from .const import (
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_RETRIES,
+    DEFAULT_PROTOCOL,
+    PROTOCOL_OPTIONS,
     DEFAULT_REQUIRE_ONLINE,
     DEFAULT_SCAN_ALARM,
     DEFAULT_SCAN_ARC_INTENSITY,
@@ -206,8 +209,8 @@ async def _tcp_smoke_test(host: str, port: int, timeout: float) -> None:
                 pass
 
 
-async def _test_controllers(host: str, port: int, timeout: float, retries: int, controllers: list[dict]) -> list[int]:
-    client = AsyncModbusTcpGateway(host, port, timeout, retries)
+async def _test_controllers(host: str, port: int, timeout: float, retries: int, protocol: str, controllers: list[dict]) -> list[int]:
+    client = AsyncModbusTcpGateway(host, port, timeout, retries, protocol)
     offline: list[int] = []
     for item in controllers:
         slave = int(item["slave"])
@@ -227,6 +230,7 @@ def _connection_schema(defaults: dict | None = None) -> vol.Schema:
             vol.Required(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): vol.All(int, vol.Range(min=1, max=65535)),
             vol.Required(CONF_TIMEOUT, default=defaults.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)): vol.All(int, vol.Range(min=1, max=60)),
             vol.Required(CONF_RETRIES, default=defaults.get(CONF_RETRIES, DEFAULT_RETRIES)): vol.All(int, vol.Range(min=0, max=10)),
+            vol.Required(CONF_PROTOCOL, default=defaults.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)): vol.In(PROTOCOL_OPTIONS),
             vol.Required(CONF_BAUDRATE, default=defaults.get(CONF_BAUDRATE, DEFAULT_BAUDRATE)): vol.In(BAUDRATE_OPTIONS),
         }
     )
@@ -309,6 +313,7 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         int(self._connection_data[CONF_PORT]),
                         float(self._connection_data[CONF_TIMEOUT]),
                         int(self._connection_data[CONF_RETRIES]),
+                        str(self._connection_data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)),
                         controllers,
                     )
                     if offline:
@@ -372,7 +377,7 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class FonrichOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry) -> None:
-        self.config_entry = config_entry
+        self._config_entry = config_entry
         self._connection_data: dict = {}
         self._controller_data: dict = {}
         self._last_offline: list[int] = []
@@ -381,7 +386,7 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
         return await self.async_step_connection()
 
     async def async_step_connection(self, user_input: dict | None = None):
-        data = {**self.config_entry.data, **self.config_entry.options}
+        data = {**self._config_entry.data, **self._config_entry.options}
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
@@ -392,17 +397,18 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
                 self._connection_data = dict(user_input)
                 return await self.async_step_controllers()
         defaults = {
-            CONF_NAME: self.config_entry.title,
+            CONF_NAME: self._config_entry.title,
             CONF_HOST: data.get(CONF_HOST, DEFAULT_HOST),
             CONF_PORT: data.get(CONF_PORT, DEFAULT_PORT),
             CONF_TIMEOUT: data.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
             CONF_RETRIES: data.get(CONF_RETRIES, DEFAULT_RETRIES),
+            CONF_PROTOCOL: data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
             CONF_BAUDRATE: data.get(CONF_BAUDRATE, DEFAULT_BAUDRATE),
         }
         return self.async_show_form(step_id="connection", data_schema=_connection_schema(defaults), errors=errors)
 
     async def async_step_controllers(self, user_input: dict | None = None):
-        data = {**self.config_entry.data, **self.config_entry.options}
+        data = {**self._config_entry.data, **self._config_entry.options}
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
@@ -424,6 +430,7 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
                         int(connection[CONF_PORT]),
                         float(connection[CONF_TIMEOUT]),
                         int(connection[CONF_RETRIES]),
+                        str(connection.get(CONF_PROTOCOL, DEFAULT_PROTOCOL)),
                         controllers,
                     )
                     if offline:
@@ -473,10 +480,10 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(step_id="channel_descriptions", data_schema=_channel_descriptions_schema(controllers))
 
     async def async_step_polling(self, user_input: dict | None = None):
-        data = {**self.config_entry.data, **self.config_entry.options}
+        data = {**self._config_entry.data, **self._config_entry.options}
         if user_input is not None:
             new_options = {
-                **self.config_entry.options,
+                **self._config_entry.options,
                 **self._connection_data,
                 **self._controller_data,
                 **dict(user_input),

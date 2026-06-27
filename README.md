@@ -1,13 +1,14 @@
 # Fonrich DC Monitor
 
-Version: `0.4.0`
+Version: `0.5.2`
 
-Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211 im **Modbus-TCP-Gateway-Modus**.
+Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
 
 ## Funktionen
 
 - UI-Konfiguration über Geräte & Dienste
 - Online-Prüfung beim Hinzufügen: Gateway per TCP und Controller per Modbus Register 260
+- HF2211 Protocol/UART-Modus einstellbar: `Modbus TCP Gateway` oder `RTU over TCP / Transparent`
 - Bus-Baudrate als Option einstellbar, z. B. 9600 oder 19200
 - Beliebig viele Controller pro Gateway als eigene Home-Assistant-Geräte
 - Automatische Sensoren für Spannung, Temperatur, DI, Ströme, Alarm/Trip, Masken, Leistung, Energie, Historie und optional Lichtbogen-Intensität
@@ -18,10 +19,12 @@ Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monit
 - Erweiterte Optionen für Abfrageintervalle, Pausen zwischen Requests/Controllern und maximale Register pro Modbus-Abfrage
 - Lovelace Karten als `www/*.js` für den Dashboard Visual Editor
 - Lovelace-Ressource wird automatisch registriert, damit keine manuelle URL-Eingabe nötig ist
-- Neue String-Karte mit Balkenanzeige für Kanal 1 bis 8
+- Neue String-Karte mit Balkenanzeige für Kanal 1 bis 24
 - Mehrere Gateways möglich: Integration einfach pro Gateway zusätzlich hinzufügen
 
 ## Empfohlene HF2211-Einstellung
+
+Für deine aktuelle Anlage empfohlen:
 
 - Protocol: `Modbus`
 - Baudrate: `9600` oder `19200`, gleich wie alle Fonrich-Controller
@@ -88,9 +91,13 @@ Falls Home Assistant die Ressource auf deiner Version nicht automatisch annimmt,
 - Start-Staffelung: `5 s`
 - Max. Register pro Abfrage: `20`
 
-## Hinweis zur Baudrate
+## Hinweis zu Protocol und Baudrate
 
-Die Integration verbindet sich per Modbus TCP mit dem HF2211. Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen V1, V2, V3 und der HF2211 gleich eingestellt sein.
+Wenn der HF2211 auf `Protocol = Modbus` steht, muss in der Integration `Modbus TCP Gateway` gewählt werden. Wenn der HF2211 auf `Protocol = NONE/Transparent` steht, muss in der Integration `RTU over TCP / Transparent` gewählt werden. Der Modus in der Integration muss also zum HF2211 passen.
+
+Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen V1, V2, V3 und der HF2211 gleich eingestellt sein.
+
+Die Integration verbindet sich per TCP mit dem HF2211. Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen V1, V2, V3 und der HF2211 gleich eingestellt sein.
 
 ## Sicherheit
 
@@ -121,7 +128,7 @@ Jede Adresse erzeugt automatisch ein eigenes Home-Assistant-Gerät mit Sensoren,
 Für mehrere HF2211-Gateways die Integration einfach mehrfach hinzufügen. Jedes Gateway bekommt eine eigene IP/Port-Kombination, eigene Controller-Liste und eigene Abfrageintervalle.
 
 
-## Neu in v0.5.0
+## Neu in v0.5.1
 
 - Beim Hinzufuegen wird nach der Controller-Liste eine eigene Seite fuer die Kanalanzahl pro Controller angezeigt.
 - Die Kanalanzahl wird als normales Zahlenfeld eingetragen, kein Schieberegler.
@@ -144,3 +151,12 @@ Dach Ost String 2
 Dach West String 1
 ...
 ```
+
+
+## Neu in v0.5.2
+
+- HF2211 Protocol/UART-Modus in Einrichtung und Optionen auswählbar.
+- `Modbus TCP Gateway` für HF2211 `Protocol = Modbus`.
+- `RTU over TCP / Transparent` für HF2211 `Protocol = NONE/Transparent` mit Modbus-RTU-CRC über TCP.
+- Online-Test der Controller nutzt den gewählten Protocol-Modus.
+- Diagnostics zeigen nun Protocol und Baudrate.

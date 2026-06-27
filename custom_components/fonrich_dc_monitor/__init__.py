@@ -9,12 +9,14 @@ from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
     CONF_BAUDRATE,
+    CONF_PROTOCOL,
     CONF_CONTROLLERS,
     CONF_HOST,
     CONF_PORT,
     CONF_RETRIES,
     CONF_TIMEOUT,
     DEFAULT_BAUDRATE,
+    DEFAULT_PROTOCOL,
     DEFAULT_PORT,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
@@ -61,7 +63,15 @@ async def _handle_controller_service(hass: HomeAssistant, call: ServiceCall, act
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register Fonrich Lovelace cards and static www path."""
+    """Register Fonrich card static path and Lovelace resource.
+
+    Uses hass.data["lovelace"].resources instead of importing
+    async_get_resource_collection because that helper is not available in all
+    current Home Assistant releases.
+    """
+    if hass.data.get(f"{DOMAIN}_frontend_registered"):
+        return
+
     www_path = Path(__file__).parent / "www"
     if www_path.exists() and hasattr(hass.http, "async_register_static_paths"):
         from homeassistant.components.http import StaticPathConfig
@@ -77,37 +87,66 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Fonrich static card path already registered or failed: %s", err)
 
-    # Best effort: add Lovelace resource automatically so cards appear in the visual editor.
-    # The resource API has changed between HA releases, therefore we try the supported
-    # helper first and fall back silently to a repair/persistent notification style log.
+    lovelace = hass.data.get("lovelace")
+    resources = getattr(lovelace, "resources", None)
+    resource_mode = getattr(lovelace, "mode", getattr(lovelace, "resource_mode", "storage"))
+    if resources is None or resource_mode == "yaml":
+        _LOGGER.info(
+            "Fonrich card file is available at %s. Automatic Lovelace resource registration is only possible in storage mode.",
+            CARD_URL,
+        )
+        hass.data[f"{DOMAIN}_frontend_registered"] = True
+        return
+
+    version = "0.0.0"
     try:
-        from homeassistant.components.lovelace.resources import async_get_resource_collection
+        import json
+        manifest = json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8"))
+        version = str(manifest.get("version", version))
+    except Exception:  # noqa: BLE001
+        pass
 
-        resources = await async_get_resource_collection(hass)
-        items = await resources.async_load()
-        for item in items:
-            if item.get("url") == CARD_URL or item.get("url", "").startswith(CARD_URL + "?"):
-                return
-
-        # HA resource storage expects res_type in recent releases.
-        try:
-            await resources.async_create_item({"res_type": "module", "url": CARD_URL})
-        except Exception:
-            # Older/custom builds may expect type instead of res_type.
-            await resources.async_create_item({"type": "module", "url": CARD_URL})
-        _LOGGER.info("Fonrich Lovelace cards resource registered automatically: %s", CARD_URL)
+    target_url = f"{CARD_URL}?v={version}"
+    try:
+        if hasattr(resources, "async_load"):
+            await resources.async_load()
+        items = list(resources.async_items()) if hasattr(resources, "async_items") else []
+        existing = [item for item in items if str(item.get("url", "")).split("?")[0] == CARD_URL]
+        if existing:
+            current = existing[0]
+            if current.get("url") != target_url:
+                await resources.async_update_item(current["id"], {"res_type": "module", "url": target_url})
+                _LOGGER.info("Updated Fonrich Lovelace cards resource: %s", target_url)
+            hass.data[f"{DOMAIN}_frontend_registered"] = True
+            return
+        await resources.async_create_item({"res_type": "module", "url": target_url})
+        _LOGGER.info("Registered Fonrich Lovelace cards resource automatically: %s", target_url)
+        hass.data[f"{DOMAIN}_frontend_registered"] = True
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning(
-            "Could not automatically register Fonrich Lovelace cards resource. "
-            "Add %s as JavaScript module manually if the cards do not appear. Error: %s",
+        _LOGGER.info(
+            "Fonrich card file is available at %s, but automatic Lovelace resource registration failed: %s",
             CARD_URL,
             err,
         )
 
+
+async def _async_register_frontend_when_ready(hass: HomeAssistant) -> None:
+    """Register frontend once Lovelace is initialized."""
+    from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+    from homeassistant.core import CoreState
+
+    async def _setup_frontend(_event=None) -> None:
+        await _async_register_frontend(hass)
+
+    if hass.state == CoreState.running:
+        await _setup_frontend()
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _setup_frontend)
+
 type FonrichConfigEntry = ConfigEntry[FonrichHub]
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    await _async_register_frontend(hass)
+    await _async_register_frontend_when_ready(hass)
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: FonrichConfigEntry) -> bool:
@@ -117,7 +156,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FonrichConfigEntry) -> b
     timeout = float(data.get(CONF_TIMEOUT, DEFAULT_TIMEOUT))
     retries = int(data.get(CONF_RETRIES, DEFAULT_RETRIES))
     baudrate = int(data.get(CONF_BAUDRATE, DEFAULT_BAUDRATE))
-    _LOGGER.debug("Fonrich gateway serial baudrate setting is %s baud. This is informational; set the HF2211 and controllers to the same baudrate.", baudrate)
+    protocol = str(data.get(CONF_PROTOCOL, DEFAULT_PROTOCOL))
+    _LOGGER.debug("Fonrich gateway protocol=%s baudrate=%s. Set the HF2211 and controllers accordingly.", protocol, baudrate)
 
     controllers = []
     for item in data.get(CONF_CONTROLLERS, []):
@@ -132,7 +172,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FonrichConfigEntry) -> b
             )
         )
 
-    client = AsyncModbusTcpGateway(host, port, timeout, retries)
+    client = AsyncModbusTcpGateway(host, port, timeout, retries, protocol)
     hub = FonrichHub(hass, client, controllers, entry.options, gateway_uid=entry.entry_id)
     await hub.start()
     entry.runtime_data = hub

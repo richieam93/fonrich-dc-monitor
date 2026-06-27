@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .coordinator import FonrichHub
-from .const import CONF_BAUDRATE, DEFAULT_BAUDRATE
+from .const import CONF_BAUDRATE, CONF_PROTOCOL, DEFAULT_BAUDRATE, DEFAULT_PROTOCOL
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict:
     hub: FonrichHub = entry.runtime_data
@@ -27,5 +27,6 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             for controller in hub.controllers
         ],
         "scan_intervals": hub.scan_intervals,
+        "configured_protocol": {**entry.data, **entry.options}.get(CONF_PROTOCOL, DEFAULT_PROTOCOL),
         "configured_baudrate": {**entry.data, **entry.options}.get(CONF_BAUDRATE, DEFAULT_BAUDRATE),
     }

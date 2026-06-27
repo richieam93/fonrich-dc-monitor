@@ -7,9 +7,10 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/richieam93/fonrich-dc-monitor/issues",
   "requirements": [],
-  "version": "0.5.0",
+  "version": "0.5.2",
   "dependencies": [
     "frontend",
-    "lovelace"
+    "lovelace",
+    "http"
   ]
 }

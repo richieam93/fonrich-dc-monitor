@@ -3,13 +3,14 @@
     "step": {
       "user": {
         "title": "Fonrich DC Monitor verbinden",
-        "description": "HF2211 im Modbus-TCP-Gateway-Modus eintragen. Dieses Gateway wird beim Weiterklicken per TCP geprüft. Du kannst mehrere Gateways hinzufügen, indem du die Integration mehrmals einrichtest.",
+        "description": "HF2211 eintragen. Wähle den passenden Protocol/UART-Modus: Modbus = Modbus TCP Gateway, NONE/Transparent = RTU over TCP. Das Gateway wird beim Weiterklicken per TCP geprüft.",
         "data": {
           "name": "Name",
           "host": "IP-Adresse / Host",
           "port": "Port",
           "timeout": "Timeout in Sekunden",
           "retries": "Wiederholungen bei Fehler",
+          "protocol": "HF2211 Protocol / UART-Modus",
           "baudrate": "Bus-Baudrate am HF2211/Fonrich (Info, z. B. 9600 oder 19200)"
         }
       },
@@ -46,7 +47,7 @@
       },
       "channel_counts": {
         "title": "Kanalanzahl pro Controller",
-        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 8 Kanäle pro Controller.",
+        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 24 Kanäle pro Controller.",
         "data": {}
       },
       "channel_descriptions": {
@@ -62,7 +63,7 @@
       "duplicate_slave": "Eine Slave-Adresse wurde doppelt eingetragen.",
       "no_slaves": "Bitte mindestens eine Slave-Adresse eintragen.",
       "unknown": "Unbekannter Fehler",
-      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 8."
+      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 24."
     },
     "abort": {
       "already_configured": "Dieses Gateway ist bereits eingerichtet"
@@ -72,13 +73,14 @@
     "step": {
       "connection": {
         "title": "Verbindung",
-        "description": "Gateway-IP/Port ändern. Das Gateway wird beim Weiterklicken per TCP geprüft.",
+        "description": "Gateway-IP/Port und HF2211 Protocol/UART-Modus ändern. Das Gateway wird beim Weiterklicken per TCP geprüft.",
         "data": {
           "name": "Name",
           "host": "IP-Adresse / Host",
           "port": "Port",
           "timeout": "Timeout in Sekunden",
           "retries": "Wiederholungen bei Fehler",
+          "protocol": "HF2211 Protocol / UART-Modus",
           "baudrate": "Bus-Baudrate am HF2211/Fonrich (Info, z. B. 9600 oder 19200)"
         }
       },
@@ -115,7 +117,7 @@
       },
       "channel_counts": {
         "title": "Kanalanzahl pro Controller",
-        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 8 Kanäle pro Controller.",
+        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 24 Kanäle pro Controller.",
         "data": {}
       },
       "channel_descriptions": {
@@ -125,7 +127,7 @@
       }
     },
     "error": {
-      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 8."
+      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 24."
     }
   }
 }
