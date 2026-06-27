@@ -25,7 +25,7 @@
       },
       "options": {
         "title": "Abfrage und Funktionen",
-        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden.",
+        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden. Eine kompakte Alarmmeldung kann als einzelner Textsensor aktiv bleiben.",
         "data": {
           "scan_alarm": "Alarm/Status Intervall (Sekunden)",
           "scan_base": "Spannung/Ampere Intervall (Sekunden)",
@@ -44,6 +44,7 @@
           "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
           "sensor_profile": "Sensor-Profil",
+          "enable_alarm_text_sensor": "Eine kompakte Alarmmeldung als Textsensor erstellen",
           "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
         }
       },
@@ -115,9 +116,10 @@
           "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
           "sensor_profile": "Sensor-Profil",
+          "enable_alarm_text_sensor": "Eine kompakte Alarmmeldung als Textsensor erstellen",
           "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
         },
-        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden."
+        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden. Eine kompakte Alarmmeldung kann als einzelner Textsensor aktiv bleiben."
       },
       "channel_counts": {
         "title": "Kanalanzahl pro Controller",

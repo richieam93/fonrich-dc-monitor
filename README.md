@@ -1,8 +1,17 @@
 # Fonrich DC Monitor
 
-Version: `0.6.6`
+Version: `0.6.7`
 
 Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
+
+
+## Neu in v0.6.7
+
+- Neue kompakte Alarmmeldung als Textsensor.
+- Standard bleibt schlank: Produktion mit Volt, Ampere, Watt und optional Energie.
+- Es werden nicht mehr viele einzelne Alarm-Entities benötigt.
+- Pro Controller gibt es eine Alarmmeldung und zusätzlich eine Gateway-Gesamtmeldung.
+- Beispielzustände: `OK`, `V1 Kanal 06 Lichtbogen`, `V2 Überspannung`, `V3 Trip aktiv`.
 
 ## Neu in v0.6.6
 

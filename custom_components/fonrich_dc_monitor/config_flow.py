@@ -63,7 +63,9 @@ from .const import (
     DEFAULT_ENABLE_BUTTONS,
     DEFAULT_ENABLE_ALARM_MASKS,
     CONF_ENABLE_ALARM_BINARY_SENSORS,
+    CONF_ENABLE_ALARM_TEXT_SENSOR,
     DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
+    DEFAULT_ENABLE_ALARM_TEXT_SENSOR,
     CONF_SENSOR_PROFILE,
     DEFAULT_SENSOR_PROFILE,
     SENSOR_PROFILE_OPTIONS,
@@ -266,6 +268,7 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
     enable_history = defaults.get(CONF_ENABLE_HISTORY, DEFAULT_ENABLE_HISTORY)
     enable_alarm_masks = defaults.get(CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS)
     enable_alarm_binary = defaults.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
+    enable_alarm_text = defaults.get(CONF_ENABLE_ALARM_TEXT_SENSOR, DEFAULT_ENABLE_ALARM_TEXT_SENSOR)
     enable_buttons = defaults.get(CONF_ENABLE_BUTTONS, DEFAULT_ENABLE_BUTTONS)
     enable_arc = defaults.get(CONF_ENABLE_ARC_INTENSITY, False)
 
@@ -277,6 +280,7 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
             vol.Required(CONF_SCAN_POWER, default=defaults.get(CONF_SCAN_POWER, DEFAULT_SCAN_POWER)): vol.All(int, vol.Range(min=10, max=7200)),
             vol.Required(CONF_ENABLE_ENERGY, default=enable_energy): bool,
             vol.Required(CONF_SCAN_ENERGY, default=defaults.get(CONF_SCAN_ENERGY, DEFAULT_SCAN_ENERGY)): vol.All(int, vol.Range(min=30, max=86400)),
+            vol.Required(CONF_ENABLE_ALARM_TEXT_SENSOR, default=enable_alarm_text): bool,
             vol.Required(CONF_ENABLE_ALARM_BINARY_SENSORS, default=enable_alarm_binary): bool,
             vol.Required(CONF_SCAN_ALARM, default=defaults.get(CONF_SCAN_ALARM, DEFAULT_SCAN_ALARM)): vol.All(int, vol.Range(min=5, max=3600)),
             vol.Required(CONF_ENABLE_HISTORY, default=enable_history): bool,

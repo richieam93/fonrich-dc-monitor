@@ -355,4 +355,4 @@ for (const card of fonrichCards) {
   }
 }
 window.dispatchEvent(new Event('fonrich-cards-loaded'));
-console.info('Fonrich DC Monitor cards loaded from stable resource URL v0.6.6');
+console.info('Fonrich DC Monitor cards loaded from stable resource URL v0.6.7');
