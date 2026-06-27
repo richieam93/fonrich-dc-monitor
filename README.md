@@ -1,8 +1,26 @@
 # Fonrich DC Monitor
 
-Version: `0.5.2`
+Version: `0.6.1`
 
 Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
+
+## Neu in v0.6.1
+
+- Neues **Sensor-Profil** in Einrichtung und Optionen:
+  - `production`: nur die wichtigen Produktionswerte
+  - `standard`: Produktionswerte plus einfache Alarmwerte
+  - `diagnostic`: alle Diagnose-/Alarm-/Historie-/Arc-Werte bei Bedarf
+- Standard ist jetzt bewusst schlank: **Volt, Ampere, Watt und optional Energie**.
+- Alarm-Binary-Sensoren, Alarmmasken, Historie, Arc-Intensität und Buttons sind standardmässig aus.
+- Einheitlichere Kanalnamen:
+  - `Kanal 01 - Dach Ost String 1 Strom`
+  - `Kanal 01 - Dach Ost String 1 Leistung`
+- Dashboard-Karten wurden auf Produktion angepasst:
+  - `Fonrich Produktion`
+  - `Fonrich Controller Produktion`
+  - `Fonrich String-Leistung`
+  - `Fonrich Energie`
+  - `Fonrich Alarme` optional
 
 ## Funktionen
 
@@ -11,20 +29,34 @@ Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monit
 - HF2211 Protocol/UART-Modus einstellbar: `Modbus TCP Gateway` oder `RTU over TCP / Transparent`
 - Bus-Baudrate als Option einstellbar, z. B. 9600 oder 19200
 - Beliebig viele Controller pro Gateway als eigene Home-Assistant-Geräte
-- Automatische Sensoren für Spannung, Temperatur, DI, Ströme, Alarm/Trip, Masken, Leistung, Energie, Historie und optional Lichtbogen-Intensität
-- Binary-Sensoren für Kanalalarme
-- Buttons für Alarm/Trip löschen, Lichtbogen-Historie löschen und Selbsttest
-- Services für `refresh_now`, `clear_alarm_trip`, `clear_arc_history`, `arc_selftest`
+- Pro Controller 1 bis 24 Kanäle als Zahlenfeld
+- Kanalbeschreibungen pro Kanal, z. B. `Dach Ost String 1`
+- Produktionssensoren für Spannung, Kanalstrom, Kanalleistung, Totalstrom, Totalleistung und optional Energie
+- Erweiterte Diagnose-/Alarmwerte optional zuschaltbar
 - Gestaffelte Abfrage über Kategorien, damit der RS485-Bus nicht auf einmal belastet wird
-- Erweiterte Optionen für Abfrageintervalle, Pausen zwischen Requests/Controllern und maximale Register pro Modbus-Abfrage
-- Lovelace Karten als `www/*.js` für den Dashboard Visual Editor
-- Lovelace-Ressource wird automatisch registriert, damit keine manuelle URL-Eingabe nötig ist
-- Neue String-Karte mit Balkenanzeige für Kanal 1 bis 24
-- Mehrere Gateways möglich: Integration einfach pro Gateway zusätzlich hinzufügen
+- Mehrere HF2211-Gateways möglich: Integration pro Gateway zusätzlich hinzufügen
+- Lovelace-Karten als `www/*.js` für den Dashboard Visual Editor
+
+## Empfohlenes Sensor-Profil
+
+Für normale PV-/String-Überwachung:
+
+```text
+Sensor-Profil: production
+Watt pro Kanal: ein
+Energie pro Kanal: optional ein
+Alarm-Binary-Sensoren: aus
+Historie: aus
+Alarmmasken: aus
+Lichtbogen-Intensität: aus
+Buttons: aus
+```
+
+Damit werden nicht mehr hunderte unnötige Alarm-Entities erzeugt.
 
 ## Empfohlene HF2211-Einstellung
 
-Für deine aktuelle Anlage empfohlen:
+Für die bekannte Anlage empfohlen:
 
 - Protocol: `Modbus`
 - Baudrate: `9600` oder `19200`, gleich wie alle Fonrich-Controller
@@ -43,8 +75,10 @@ Für deine aktuelle Anlage empfohlen:
 2. Home Assistant neu starten.
 3. Einstellungen → Geräte & Dienste → Integration hinzufügen → `Fonrich DC Monitor`.
 4. IP/Port eintragen.
-5. Controller-Adressen als Zahlen eintragen, z. B. `240,241,242` oder je Zeile eine Adresse. Keine Schieberegler.
-6. Optional Controller-Namen eintragen, z. B. `V1 / Kasten 1,V2 / Kasten 2,V3 / Kasten 3`.
+5. Controller-Adressen als Zahlen eintragen, z. B. `240,241,242` oder je Zeile eine Adresse.
+6. Kanalanzahl pro Controller eintragen, z. B. `8` oder bis `24`.
+7. Kanalbeschreibungen eintragen.
+8. Sensor-Profil und Abfrageintervalle wählen.
 
 ## Dashboard Karten
 
@@ -54,7 +88,7 @@ Die Integration bringt diese Datei mit:
 custom_components/fonrich_dc_monitor/www/fonrich-dc-monitor-cards.js
 ```
 
-Ab Version `0.4.0` versucht die Integration die Lovelace-Ressource automatisch zu registrieren:
+Die Integration versucht die Lovelace-Ressource automatisch zu registrieren:
 
 ```text
 /fonrich_dc_monitor/fonrich-dc-monitor-cards.js
@@ -67,96 +101,42 @@ Normaler Ablauf nach Installation oder Update:
 3. Karte hinzufügen.
 4. Im Visual Editor nach `Fonrich` suchen.
 5. Eine dieser Karten auswählen:
-   - `Fonrich DC Übersicht`
-   - `Fonrich Controller`
+   - `Fonrich Produktion`
+   - `Fonrich Controller Produktion`
+   - `Fonrich String-Leistung`
+   - `Fonrich Energie`
    - `Fonrich Alarme`
-   - `Fonrich String-Ströme`
 
-Falls Home Assistant die Ressource auf deiner Version nicht automatisch annimmt, im Log erscheint ein Hinweis. Dann kann sie weiterhin manuell unter Einstellungen → Dashboards → Ressourcen als `JavaScript-Modul` hinzugefügt werden.
+Falls Home Assistant die Ressource auf deiner Version nicht automatisch annimmt, kann sie weiterhin manuell unter Einstellungen → Dashboards → Ressourcen als `JavaScript-Modul` hinzugefügt werden.
 
-## Beispiel für deine Anlage
+## Beispiel
 
-- Host: `192.168.0.41`
-- Port: `4002`
-- Controller-Adressen: `240,241,242`
-- Controller-Namen optional: `V1 / Kasten 1,V2 / Kasten 2,V3 / Kasten 3`
-- Online-Prüfung: aktiv
-- Alarm: `10 s`
-- Basiswerte: `30 s`
-- Leistung: `60 s`
-- Energie/History: `300 s`
-- Lichtbogen-Intensität: zuerst aus
-- Pause zwischen Requests: `80 ms`
-- Pause zwischen Controllern: `150 ms`
-- Start-Staffelung: `5 s`
-- Max. Register pro Abfrage: `20`
+```text
+Host: 192.168.0.41
+Port: 4002
+Controller-Adressen: 240,241,242
+Controller-Namen: V1 / Kasten 1,V2 / Kasten 2,V3 / Kasten 3
+Kanalanzahl: 8 je Controller
+Sensor-Profil: production
+Spannung/Ampere: 30 s
+Watt: 60 s
+Energie: 300 s
+Pause zwischen Requests: 80 ms
+Pause zwischen Controllern: 150 ms
+Max. Register pro Abfrage: 20
+```
 
 ## Hinweis zu Protocol und Baudrate
 
-Wenn der HF2211 auf `Protocol = Modbus` steht, muss in der Integration `Modbus TCP Gateway` gewählt werden. Wenn der HF2211 auf `Protocol = NONE/Transparent` steht, muss in der Integration `RTU over TCP / Transparent` gewählt werden. Der Modus in der Integration muss also zum HF2211 passen.
+Wenn der HF2211 auf `Protocol = Modbus` steht, muss in der Integration `Modbus TCP Gateway` gewählt werden. Wenn der HF2211 auf `Protocol = NONE/Transparent` steht, muss in der Integration `RTU over TCP / Transparent` gewählt werden.
 
-Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen V1, V2, V3 und der HF2211 gleich eingestellt sein.
-
-Die Integration verbindet sich per TCP mit dem HF2211. Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen V1, V2, V3 und der HF2211 gleich eingestellt sein.
+Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen alle Fonrich-Controller und der HF2211 gleich eingestellt sein.
 
 ## Sicherheit
 
 Lichtbogen-/Trip-Alarme sind sicherheitsrelevant. Vor dem Quittieren immer DC-seitig prüfen lassen.
 
 
-## Mehr als 3 Controller
+## 0.6.1
 
-Im Feld **Slave-Adressen als Zahlen** können beliebig viele Modbus-Adressen eingetragen werden:
-
-```text
-240,241,242,243,244
-```
-
-oder zeilenweise:
-
-```text
-240
-241
-242
-243
-```
-
-Jede Adresse erzeugt automatisch ein eigenes Home-Assistant-Gerät mit Sensoren, Binary-Sensoren und optional Buttons.
-
-## Mehrere Gateways
-
-Für mehrere HF2211-Gateways die Integration einfach mehrfach hinzufügen. Jedes Gateway bekommt eine eigene IP/Port-Kombination, eigene Controller-Liste und eigene Abfrageintervalle.
-
-
-## Neu in v0.5.1
-
-- Beim Hinzufuegen wird nach der Controller-Liste eine eigene Seite fuer die Kanalanzahl pro Controller angezeigt.
-- Die Kanalanzahl wird als normales Zahlenfeld eingetragen, kein Schieberegler.
-- Danach folgt eine Seite fuer Kanalbeschreibungen. Pro Controller eine Zeile pro Kanal, z. B. `Dach Ost String 1`.
-- Sensoren und Binary-Sensoren werden nur fuer die aktivierte Kanalanzahl erstellt.
-- Kanalbeschreibungen werden als Entity-Namen-Anhang und als Attribute `channel` und `channel_description` gesetzt.
-- Die Dashboard-Karten lesen die Kanalbeschreibungen automatisch und zeigen nur die konfigurierten Kanaele an.
-
-Beispiel:
-
-```text
-Controller: 240,241,242
-Kanalanzahl 240: 8
-Kanalanzahl 241: 6
-Kanalanzahl 242: 4
-
-Kanalbeschreibungen 240:
-Dach Ost String 1
-Dach Ost String 2
-Dach West String 1
-...
-```
-
-
-## Neu in v0.5.2
-
-- HF2211 Protocol/UART-Modus in Einrichtung und Optionen auswählbar.
-- `Modbus TCP Gateway` für HF2211 `Protocol = Modbus`.
-- `RTU over TCP / Transparent` für HF2211 `Protocol = NONE/Transparent` mit Modbus-RTU-CRC über TCP.
-- Online-Test der Controller nutzt den gewählten Protocol-Modus.
-- Diagnostics zeigen nun Protocol und Baudrate.
+Fix: SensorEntityDescription compatibility for newer Home Assistant versions.

@@ -62,6 +62,14 @@ from .const import (
     DEFAULT_ENABLE_HISTORY,
     DEFAULT_ENABLE_BUTTONS,
     DEFAULT_ENABLE_ALARM_MASKS,
+    CONF_ENABLE_ALARM_BINARY_SENSORS,
+    DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
+    CONF_SENSOR_PROFILE,
+    DEFAULT_SENSOR_PROFILE,
+    SENSOR_PROFILE_OPTIONS,
+    SENSOR_PROFILE_PRODUCTION,
+    SENSOR_PROFILE_STANDARD,
+    SENSOR_PROFILE_DIAGNOSTIC,
     CONF_ENABLE_ARC_INTENSITY,
     DEFAULT_CHANNEL_COUNT,
     MAX_CHANNEL_COUNT,
@@ -249,20 +257,34 @@ def _controllers_schema(defaults: dict | None = None) -> vol.Schema:
 
 def _options_schema(defaults: dict | None = None) -> vol.Schema:
     defaults = defaults or {}
+    profile = defaults.get(CONF_SENSOR_PROFILE, DEFAULT_SENSOR_PROFILE)
+
+    # The default setup is intentionally production-focused: volts, amps, watts and energy.
+    # Advanced alarm/status/diagnostic entities can be enabled later in Options.
+    enable_power = defaults.get(CONF_ENABLE_POWER, DEFAULT_ENABLE_POWER)
+    enable_energy = defaults.get(CONF_ENABLE_ENERGY, DEFAULT_ENABLE_ENERGY)
+    enable_history = defaults.get(CONF_ENABLE_HISTORY, DEFAULT_ENABLE_HISTORY)
+    enable_alarm_masks = defaults.get(CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS)
+    enable_alarm_binary = defaults.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
+    enable_buttons = defaults.get(CONF_ENABLE_BUTTONS, DEFAULT_ENABLE_BUTTONS)
+    enable_arc = defaults.get(CONF_ENABLE_ARC_INTENSITY, False)
+
     return vol.Schema(
         {
-            vol.Required(CONF_SCAN_ALARM, default=defaults.get(CONF_SCAN_ALARM, DEFAULT_SCAN_ALARM)): vol.All(int, vol.Range(min=5, max=3600)),
+            vol.Required(CONF_SENSOR_PROFILE, default=profile): vol.In(SENSOR_PROFILE_OPTIONS),
             vol.Required(CONF_SCAN_BASE, default=defaults.get(CONF_SCAN_BASE, DEFAULT_SCAN_BASE)): vol.All(int, vol.Range(min=5, max=3600)),
-            vol.Required(CONF_ENABLE_POWER, default=defaults.get(CONF_ENABLE_POWER, DEFAULT_ENABLE_POWER)): bool,
+            vol.Required(CONF_ENABLE_POWER, default=enable_power): bool,
             vol.Required(CONF_SCAN_POWER, default=defaults.get(CONF_SCAN_POWER, DEFAULT_SCAN_POWER)): vol.All(int, vol.Range(min=10, max=7200)),
-            vol.Required(CONF_ENABLE_ENERGY, default=defaults.get(CONF_ENABLE_ENERGY, DEFAULT_ENABLE_ENERGY)): bool,
+            vol.Required(CONF_ENABLE_ENERGY, default=enable_energy): bool,
             vol.Required(CONF_SCAN_ENERGY, default=defaults.get(CONF_SCAN_ENERGY, DEFAULT_SCAN_ENERGY)): vol.All(int, vol.Range(min=30, max=86400)),
-            vol.Required(CONF_ENABLE_HISTORY, default=defaults.get(CONF_ENABLE_HISTORY, DEFAULT_ENABLE_HISTORY)): bool,
+            vol.Required(CONF_ENABLE_ALARM_BINARY_SENSORS, default=enable_alarm_binary): bool,
+            vol.Required(CONF_SCAN_ALARM, default=defaults.get(CONF_SCAN_ALARM, DEFAULT_SCAN_ALARM)): vol.All(int, vol.Range(min=5, max=3600)),
+            vol.Required(CONF_ENABLE_HISTORY, default=enable_history): bool,
             vol.Required(CONF_SCAN_HISTORY, default=defaults.get(CONF_SCAN_HISTORY, DEFAULT_SCAN_HISTORY)): vol.All(int, vol.Range(min=30, max=86400)),
-            vol.Required(CONF_ENABLE_ARC_INTENSITY, default=defaults.get(CONF_ENABLE_ARC_INTENSITY, False)): bool,
+            vol.Required(CONF_ENABLE_ALARM_MASKS, default=enable_alarm_masks): bool,
+            vol.Required(CONF_ENABLE_ARC_INTENSITY, default=enable_arc): bool,
             vol.Required(CONF_SCAN_ARC_INTENSITY, default=defaults.get(CONF_SCAN_ARC_INTENSITY, DEFAULT_SCAN_ARC_INTENSITY)): vol.All(int, vol.Range(min=10, max=7200)),
-            vol.Required(CONF_ENABLE_ALARM_MASKS, default=defaults.get(CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS)): bool,
-            vol.Required(CONF_ENABLE_BUTTONS, default=defaults.get(CONF_ENABLE_BUTTONS, DEFAULT_ENABLE_BUTTONS)): bool,
+            vol.Required(CONF_ENABLE_BUTTONS, default=enable_buttons): bool,
             vol.Required(CONF_INTER_REQUEST_DELAY_MS, default=defaults.get(CONF_INTER_REQUEST_DELAY_MS, DEFAULT_INTER_REQUEST_DELAY_MS)): vol.All(int, vol.Range(min=0, max=5000)),
             vol.Required(CONF_INTER_CONTROLLER_DELAY_MS, default=defaults.get(CONF_INTER_CONTROLLER_DELAY_MS, DEFAULT_INTER_CONTROLLER_DELAY_MS)): vol.All(int, vol.Range(min=0, max=5000)),
             vol.Required(CONF_STARTUP_STAGGER_SECONDS, default=defaults.get(CONF_STARTUP_STAGGER_SECONDS, DEFAULT_STARTUP_STAGGER_SECONDS)): vol.All(int, vol.Range(min=0, max=120)),

@@ -7,6 +7,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import (
+    CONF_ENABLE_ALARM_BINARY_SENSORS,
+    CONF_SENSOR_PROFILE,
+    DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
+    DEFAULT_SENSOR_PROFILE,
+    SENSOR_PROFILE_DIAGNOSTIC,
+    SENSOR_PROFILE_STANDARD,
+)
 from .coordinator import FonrichHub
 from .entity import FonrichEntity
 from .registers import BINARY_DESCRIPTIONS, BinaryDescription
@@ -19,8 +27,18 @@ def _channel_from_key(key: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _binary_sensors_enabled(hub: FonrichHub) -> bool:
+    profile = str(hub.options.get(CONF_SENSOR_PROFILE, DEFAULT_SENSOR_PROFILE))
+    return bool(
+        hub.options.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
+        or profile in {SENSOR_PROFILE_STANDARD, SENSOR_PROFILE_DIAGNOSTIC}
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     hub: FonrichHub = entry.runtime_data
+    if not _binary_sensors_enabled(hub):
+        return
     entities = []
     for controller in hub.controllers:
         for description in BINARY_DESCRIPTIONS:
@@ -44,11 +62,10 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
         if self.channel is None:
             return name
         suffix = re.sub(rf"^Kanal\s+{self.channel}\s*", "", name).strip()
-        base_name = f"Kanal {self.channel:02d}" if not suffix else f"Kanal {self.channel:02d} {suffix}"
         channel_description = self.controller.channel_description(self.channel).strip()
-        if not channel_description or channel_description.lower() == f"kanal {self.channel}".lower():
-            return base_name
-        return f"{base_name} - {channel_description}"
+        if channel_description and channel_description.lower() != f"kanal {self.channel}".lower():
+            return f"Kanal {self.channel:02d} - {channel_description} {suffix}".strip()
+        return f"Kanal {self.channel:02d} {suffix}".strip()
 
     @property
     def is_on(self) -> bool | None:

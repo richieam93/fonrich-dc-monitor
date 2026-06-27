@@ -33,13 +33,13 @@ class ButtonDescription:
 
 BASE_REGISTERS: Final[list[RegisterDescription]] = [
     RegisterDescription("voltage", "Spannung", 260, "base", "uint16", 1, 0, "V", "voltage", "measurement"),
-    RegisterDescription("temperature_1", "Temperatur 1", 261, "base", "int16", 0.1, 1, "°C", "temperature", "measurement"),
-    RegisterDescription("temperature_2", "Temperatur 2", 262, "base", "int16", 0.1, 1, "°C", "temperature", "measurement"),
+    RegisterDescription("temperature_1", "Temperatur 1", 261, "diagnostic", "int16", 0.1, 1, "°C", "temperature", "measurement"),
+    RegisterDescription("temperature_2", "Temperatur 2", 262, "diagnostic", "int16", 0.1, 1, "°C", "temperature", "measurement"),
     RegisterDescription("di_status_raw", "DI Status Rohwert", 263, "alarm", "uint16"),
-    RegisterDescription("online_hall_channels", "Online Hall Kanaele", 264, "base", "uint16", 1, 0, None, None, "measurement"),
-    RegisterDescription("total_reverse_current", "Total Rueckstrom", 265, "base", "int16", 0.01, 2, "A", "current", "measurement"),
+    RegisterDescription("online_hall_channels", "Online Hall Kanaele", 264, "diagnostic", "uint16", 1, 0, None, None, "measurement"),
+    RegisterDescription("total_reverse_current", "Total Rueckstrom", 265, "diagnostic", "int16", 0.01, 2, "A", "current", "measurement"),
     RegisterDescription("total_current", "Total Strom", 266, "base", "int16", 0.01, 2, "A", "current", "measurement"),
-    RegisterDescription("average_current", "Durchschnitt Strom", 267, "base", "int16", 0.001, 3, "A", "current", "measurement"),
+    RegisterDescription("average_current", "Durchschnitt Strom", 267, "diagnostic", "int16", 0.001, 3, "A", "current", "measurement"),
 ]
 
 CURRENT_REGISTERS: Final[list[RegisterDescription]] = [
@@ -73,10 +73,10 @@ MASK_REGISTERS: Final[list[RegisterDescription]] = [
 ]
 
 POWER_REGISTERS: Final[list[RegisterDescription]] = [
-    RegisterDescription("total_power_direct", "Total Leistung direkt", 512, "power", "uint16", 100, 0, "W", "power", "measurement"),
-    RegisterDescription("average_power_direct", "Durchschnitt Leistung direkt", 513, "power", "uint16", 1, 0, "W", "power", "measurement"),
+    RegisterDescription("total_power_direct", "Total Leistung", 512, "power", "uint16", 100, 0, "W", "power", "measurement"),
+    RegisterDescription("average_power_direct", "Durchschnitt Leistung", 513, "power", "uint16", 1, 0, "W", "power", "measurement"),
 ] + [
-    RegisterDescription(f"ch{ch}_power_direct", f"Kanal {ch} Leistung direkt", 513 + ch, "power", "uint16", 1, 0, "W", "power", "measurement")
+    RegisterDescription(f"ch{ch}_power_direct", f"Kanal {ch} Leistung", 513 + ch, "power", "uint16", 1, 0, "W", "power", "measurement")
     for ch in range(1, 25)
 ]
 

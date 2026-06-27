@@ -8,49 +8,55 @@ from dataclasses import dataclass
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_ENABLE_ALARM_BINARY_SENSORS,
+    CONF_ENABLE_ALARM_MASKS,
     CONF_ENABLE_ARC_INTENSITY,
-    CONF_RETRIES,
+    CONF_ENABLE_ENERGY,
+    CONF_ENABLE_HISTORY,
+    CONF_ENABLE_POWER,
+    CONF_INTER_CONTROLLER_DELAY_MS,
+    CONF_INTER_REQUEST_DELAY_MS,
+    CONF_MAX_REGISTERS_PER_REQUEST,
     CONF_SCAN_ALARM,
     CONF_SCAN_ARC_INTENSITY,
     CONF_SCAN_BASE,
     CONF_SCAN_ENERGY,
+    CONF_SCAN_HISTORY,
     CONF_SCAN_POWER,
-    CONF_TIMEOUT,
+    CONF_SENSOR_PROFILE,
+    CONF_STARTUP_STAGGER_SECONDS,
+    DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
+    DEFAULT_ENABLE_ALARM_MASKS,
+    DEFAULT_ENABLE_ENERGY,
+    DEFAULT_ENABLE_HISTORY,
+    DEFAULT_ENABLE_POWER,
+    DEFAULT_INTER_CONTROLLER_DELAY_MS,
+    DEFAULT_INTER_REQUEST_DELAY_MS,
+    DEFAULT_MAX_REGISTERS_PER_REQUEST,
     DEFAULT_SCAN_ALARM,
     DEFAULT_SCAN_ARC_INTENSITY,
     DEFAULT_SCAN_BASE,
     DEFAULT_SCAN_ENERGY,
-    DEFAULT_SCAN_POWER,
-    CONF_SCAN_HISTORY,
-    CONF_INTER_REQUEST_DELAY_MS,
-    CONF_INTER_CONTROLLER_DELAY_MS,
-    CONF_STARTUP_STAGGER_SECONDS,
-    CONF_MAX_REGISTERS_PER_REQUEST,
-    CONF_ENABLE_POWER,
-    CONF_ENABLE_ENERGY,
-    CONF_ENABLE_HISTORY,
-    CONF_ENABLE_ALARM_MASKS,
     DEFAULT_SCAN_HISTORY,
-    DEFAULT_INTER_REQUEST_DELAY_MS,
-    DEFAULT_INTER_CONTROLLER_DELAY_MS,
+    DEFAULT_SCAN_POWER,
+    DEFAULT_SENSOR_PROFILE,
     DEFAULT_STARTUP_STAGGER_SECONDS,
-    DEFAULT_MAX_REGISTERS_PER_REQUEST,
-    DEFAULT_ENABLE_POWER,
-    DEFAULT_ENABLE_ENERGY,
-    DEFAULT_ENABLE_HISTORY,
-    DEFAULT_ENABLE_ALARM_MASKS,
-    DEFAULT_TIMEOUT,
+    SENSOR_PROFILE_DIAGNOSTIC,
+    SENSOR_PROFILE_PRODUCTION,
+    SENSOR_PROFILE_STANDARD,
 )
-from .modbus_client import AsyncModbusTcpGateway, CallbackRegistry, FonrichModbusError
+from .modbus_client import AsyncModbusTcpGateway, CallbackRegistry
 from .registers import ALL_SENSOR_REGISTERS, RegisterDescription
 
 _LOGGER = logging.getLogger(__name__)
 
 _CHANNEL_RE = re.compile(r"^ch(\d+)_")
 
+
 def _channel_from_key(key: str) -> int | None:
     match = _CHANNEL_RE.match(key)
     return int(match.group(1)) if match else None
+
 
 @dataclass(frozen=True)
 class ControllerConfig:
@@ -68,6 +74,7 @@ class ControllerConfig:
         if index < len(self.channel_descriptions):
             return self.channel_descriptions[index]
         return ""
+
 
 class FonrichHub:
     """Shared data hub that staggers Modbus polling by category."""
@@ -94,6 +101,10 @@ class FonrichHub:
         self._stopped = asyncio.Event()
 
     @property
+    def sensor_profile(self) -> str:
+        return str(self.options.get(CONF_SENSOR_PROFILE, DEFAULT_SENSOR_PROFILE))
+
+    @property
     def scan_intervals(self) -> dict[str, int]:
         return {
             "alarm": int(self.options.get(CONF_SCAN_ALARM, DEFAULT_SCAN_ALARM)),
@@ -102,6 +113,7 @@ class FonrichHub:
             "energy": int(self.options.get(CONF_SCAN_ENERGY, DEFAULT_SCAN_ENERGY)),
             "history": int(self.options.get(CONF_SCAN_HISTORY, DEFAULT_SCAN_HISTORY)),
             "arc_intensity": int(self.options.get(CONF_SCAN_ARC_INTENSITY, DEFAULT_SCAN_ARC_INTENSITY)),
+            "diagnostic": int(self.options.get(CONF_SCAN_BASE, DEFAULT_SCAN_BASE)),
         }
 
     @property
@@ -116,8 +128,25 @@ class FonrichHub:
     def max_registers_per_request(self) -> int:
         return int(self.options.get(CONF_MAX_REGISTERS_PER_REQUEST, DEFAULT_MAX_REGISTERS_PER_REQUEST))
 
+    def production_only(self) -> bool:
+        return self.sensor_profile == SENSOR_PROFILE_PRODUCTION
+
+    def include_alarm_registers(self) -> bool:
+        return bool(
+            self.sensor_profile in {SENSOR_PROFILE_STANDARD, SENSOR_PROFILE_DIAGNOSTIC}
+            or self.options.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
+            or self.options.get(CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS)
+        )
+
+    def include_diagnostics(self) -> bool:
+        return self.sensor_profile == SENSOR_PROFILE_DIAGNOSTIC
+
     def enabled_categories(self) -> list[str]:
-        categories = ["alarm", "base"]
+        categories = ["base"]
+        if self.include_alarm_registers():
+            categories.append("alarm")
+        if self.include_diagnostics():
+            categories.append("diagnostic")
         if self.options.get(CONF_ENABLE_POWER, DEFAULT_ENABLE_POWER):
             categories.append("power")
         if self.options.get(CONF_ENABLE_ENERGY, DEFAULT_ENABLE_ENERGY):
@@ -147,9 +176,8 @@ class FonrichHub:
             await self._poll_category(category)
 
     async def _poll_loop(self, category: str) -> None:
-        # Small stagger between categories after restart.
         stagger = int(self.options.get(CONF_STARTUP_STAGGER_SECONDS, DEFAULT_STARTUP_STAGGER_SECONDS))
-        order = {"alarm": 0, "base": 1, "power": 2, "energy": 3, "history": 4, "arc_intensity": 5}
+        order = {"base": 0, "power": 1, "energy": 2, "alarm": 3, "diagnostic": 4, "history": 5, "arc_intensity": 6}
         initial_delay = 1 + order.get(category, 0) * stagger
         try:
             await asyncio.wait_for(self._stopped.wait(), timeout=initial_delay)
@@ -194,7 +222,6 @@ class FonrichHub:
         category: str,
         descriptions: list[RegisterDescription],
     ) -> None:
-        # Read contiguous register groups rather than one request per entity.
         groups: list[list[RegisterDescription]] = []
         for desc in sorted(descriptions, key=lambda item: item.address):
             if (

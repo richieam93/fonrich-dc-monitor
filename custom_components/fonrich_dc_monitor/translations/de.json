@@ -25,24 +25,26 @@
       },
       "options": {
         "title": "Abfrage und Funktionen",
-        "description": "Intervalle, optionale Registergruppen und Bus-Schonung einstellen.",
+        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden.",
         "data": {
-          "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
-          "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
-          "enable_power": "Leistungsregister aktivieren",
-          "scan_power": "Leistung Intervall (Sekunden)",
-          "enable_energy": "Energieregister aktivieren",
+          "scan_alarm": "Alarm/Status Intervall (Sekunden)",
+          "scan_base": "Spannung/Ampere Intervall (Sekunden)",
+          "enable_power": "Watt pro Kanal aktivieren",
+          "scan_power": "Watt Intervall (Sekunden)",
+          "enable_energy": "Energie pro Kanal aktivieren",
           "scan_energy": "Energie Intervall (Sekunden)",
-          "enable_history": "Lichtbogen-Historie aktivieren",
+          "enable_history": "Historie-Sensoren aktivieren",
           "scan_history": "Historie Intervall (Sekunden)",
           "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
           "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)",
-          "enable_alarm_masks": "Zusätzliche Alarmmasken aktivieren",
+          "enable_alarm_masks": "Alarmmasken als Rohwert-Sensoren aktivieren",
           "enable_buttons": "Buttons für Reset/Selbsttest erstellen",
           "inter_request_delay_ms": "Pause zwischen Modbus-Requests (Millisekunden)",
           "inter_controller_delay_ms": "Pause zwischen Controllern (Millisekunden)",
           "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
-          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
+          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
+          "sensor_profile": "Sensor-Profil",
+          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
         }
       },
       "channel_counts": {
@@ -96,24 +98,26 @@
       "polling": {
         "title": "Abfrage und Funktionen",
         "data": {
-          "scan_alarm": "Alarm/Trip/Masken Intervall (Sekunden)",
-          "scan_base": "Spannung/Strom/Temperatur Intervall (Sekunden)",
-          "enable_power": "Leistungsregister aktivieren",
-          "scan_power": "Leistung Intervall (Sekunden)",
-          "enable_energy": "Energieregister aktivieren",
+          "scan_alarm": "Alarm/Status Intervall (Sekunden)",
+          "scan_base": "Spannung/Ampere Intervall (Sekunden)",
+          "enable_power": "Watt pro Kanal aktivieren",
+          "scan_power": "Watt Intervall (Sekunden)",
+          "enable_energy": "Energie pro Kanal aktivieren",
           "scan_energy": "Energie Intervall (Sekunden)",
-          "enable_history": "Lichtbogen-Historie aktivieren",
+          "enable_history": "Historie-Sensoren aktivieren",
           "scan_history": "Historie Intervall (Sekunden)",
           "enable_arc_intensity": "Lichtbogen-Intensität aktivieren",
           "scan_arc_intensity": "Lichtbogen-Intensität Intervall (Sekunden)",
-          "enable_alarm_masks": "Zusätzliche Alarmmasken aktivieren",
+          "enable_alarm_masks": "Alarmmasken als Rohwert-Sensoren aktivieren",
           "enable_buttons": "Buttons für Reset/Selbsttest erstellen",
           "inter_request_delay_ms": "Pause zwischen Modbus-Requests (Millisekunden)",
           "inter_controller_delay_ms": "Pause zwischen Controllern (Millisekunden)",
           "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
-          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
+          "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
+          "sensor_profile": "Sensor-Profil",
+          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
         },
-        "description": "Intervalle, optionale Registergruppen und Bus-Schonung einstellen."
+        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden."
       },
       "channel_counts": {
         "title": "Kanalanzahl pro Controller",
