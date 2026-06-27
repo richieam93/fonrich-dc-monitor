@@ -51,6 +51,16 @@ class ControllerConfig:
     name: str
     slave: int
     enabled: bool = True
+    channel_count: int = 8
+    channel_descriptions: tuple[str, ...] = ()
+
+    def channel_description(self, channel: int) -> str:
+        if channel < 1 or channel > self.channel_count:
+            return ""
+        index = channel - 1
+        if index < len(self.channel_descriptions):
+            return self.channel_descriptions[index]
+        return ""
 
 class FonrichHub:
     """Shared data hub that staggers Modbus polling by category."""

@@ -19,6 +19,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
                 "id": controller.controller_id,
                 "name": controller.name,
                 "slave": controller.slave,
+                "channel_count": controller.channel_count,
+                "channel_descriptions": list(controller.channel_descriptions),
                 "available": hub.available.get(controller.controller_id),
                 "last_error": hub.last_error.get(controller.controller_id),
             }

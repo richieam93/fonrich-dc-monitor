@@ -15,11 +15,10 @@ from .const import (
     CONF_CONTROLLERS,
     CONF_CONTROLLER_NAMES,
     CONF_CONTROLLER_SLAVES,
-    CONF_ENABLE_ARC_INTENSITY,
+    CONF_REQUIRE_ONLINE,
     CONF_HOST,
     CONF_PORT,
     CONF_RETRIES,
-    CONF_REQUIRE_ONLINE,
     CONF_SCAN_ALARM,
     CONF_SCAN_ARC_INTENSITY,
     CONF_SCAN_BASE,
@@ -60,6 +59,9 @@ from .const import (
     DEFAULT_ENABLE_HISTORY,
     DEFAULT_ENABLE_BUTTONS,
     DEFAULT_ENABLE_ALARM_MASKS,
+    CONF_ENABLE_ARC_INTENSITY,
+    DEFAULT_CHANNEL_COUNT,
+    MAX_CHANNEL_COUNT,
     DOMAIN,
 )
 from .modbus_client import AsyncModbusTcpGateway
@@ -91,19 +93,25 @@ def _parse_names(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
-def _controller_list_from_text(slaves_text: str, names_text: str = "") -> list[dict]:
+def _controller_list_from_text(slaves_text: str, names_text: str = "", existing: list[dict] | None = None) -> list[dict]:
     slaves = _parse_slave_list(slaves_text)
     names = _parse_names(names_text)
+    old_by_slave = {int(item.get("slave")): item for item in existing or [] if item.get("slave") is not None}
     controllers: list[dict] = []
     for idx, slave in enumerate(slaves, start=1):
+        old = old_by_slave.get(slave, {})
         default_name = f"V{idx} / Kasten {idx}"
-        name = names[idx - 1] if idx <= len(names) else default_name
+        name = names[idx - 1] if idx <= len(names) else old.get("name", default_name)
+        count = int(old.get("channel_count", DEFAULT_CHANNEL_COUNT))
+        descriptions = list(old.get("channel_descriptions", []))
         controllers.append(
             {
                 "id": f"slave_{slave}",
                 "name": name,
                 "slave": slave,
                 "enabled": True,
+                "channel_count": count,
+                "channel_descriptions": descriptions,
             }
         )
     return controllers
@@ -122,6 +130,67 @@ def _controllers_to_text(data: dict | None = None) -> dict:
         CONF_CONTROLLER_NAMES: (data or {}).get(CONF_CONTROLLER_NAMES, DEFAULT_CONTROLLER_NAMES),
         CONF_REQUIRE_ONLINE: (data or {}).get(CONF_REQUIRE_ONLINE, DEFAULT_REQUIRE_ONLINE),
     }
+
+
+def _channel_count_key(controller: dict) -> str:
+    return f"channel_count_{controller['slave']}"
+
+
+def _channel_desc_key(controller: dict) -> str:
+    return f"channel_descriptions_{controller['slave']}"
+
+
+def _channel_counts_schema(controllers: list[dict]) -> vol.Schema:
+    fields = {}
+    for controller in controllers:
+        fields[vol.Required(_channel_count_key(controller), default=int(controller.get("channel_count", DEFAULT_CHANNEL_COUNT)))] = vol.All(int, vol.Range(min=1, max=MAX_CHANNEL_COUNT))
+    return vol.Schema(fields)
+
+
+def _channel_descriptions_schema(controllers: list[dict]) -> vol.Schema:
+    fields = {}
+    for controller in controllers:
+        count = int(controller.get("channel_count", DEFAULT_CHANNEL_COUNT))
+        existing = list(controller.get("channel_descriptions", []))
+        lines = []
+        for ch in range(1, count + 1):
+            value = existing[ch - 1] if ch - 1 < len(existing) and existing[ch - 1] else f"Kanal {ch}"
+            lines.append(value)
+        fields[vol.Optional(_channel_desc_key(controller), default="\n".join(lines))] = str
+    return vol.Schema(fields)
+
+
+def _apply_channel_counts(controllers: list[dict], user_input: dict) -> list[dict]:
+    updated = []
+    for controller in controllers:
+        item = dict(controller)
+        count = int(user_input.get(_channel_count_key(controller), item.get("channel_count", DEFAULT_CHANNEL_COUNT)))
+        item["channel_count"] = count
+        desc = list(item.get("channel_descriptions", []))[:count]
+        while len(desc) < count:
+            desc.append("")
+        item["channel_descriptions"] = desc
+        updated.append(item)
+    return updated
+
+
+def _apply_channel_descriptions(controllers: list[dict], user_input: dict) -> list[dict]:
+    updated = []
+    for controller in controllers:
+        item = dict(controller)
+        count = int(item.get("channel_count", DEFAULT_CHANNEL_COUNT))
+        raw = str(user_input.get(_channel_desc_key(controller), ""))
+        # One line per channel. Empty lines are allowed, so channel number stays stable.
+        lines = [line.strip() for line in raw.splitlines()]
+        if len(lines) == 1 and "," in raw:
+            lines = [part.strip() for part in raw.split(",")]
+        descriptions = []
+        for ch in range(1, count + 1):
+            value = lines[ch - 1] if ch - 1 < len(lines) else ""
+            descriptions.append(value)
+        item["channel_descriptions"] = descriptions
+        updated.append(item)
+    return updated
 
 
 async def _tcp_smoke_test(host: str, port: int, timeout: float) -> None:
@@ -218,7 +287,6 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}")
                 self._abort_if_unique_id_configured()
                 return await self.async_step_controllers()
-
         return self.async_show_form(step_id="user", data_schema=_connection_schema(), errors=errors)
 
     async def async_step_controllers(self, user_input: dict | None = None):
@@ -253,7 +321,7 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_CONTROLLER_NAMES: user_input.get(CONF_CONTROLLER_NAMES, ""),
                             CONF_REQUIRE_ONLINE: require_online,
                         }
-                        return await self.async_step_options()
+                        return await self.async_step_channel_counts()
                 else:
                     self._controller_data = {
                         CONF_CONTROLLERS: controllers,
@@ -261,7 +329,7 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_CONTROLLER_NAMES: user_input.get(CONF_CONTROLLER_NAMES, ""),
                         CONF_REQUIRE_ONLINE: require_online,
                     }
-                    return await self.async_step_options()
+                    return await self.async_step_channel_counts()
         description_placeholders = {"offline": ", ".join(str(item) for item in self._last_offline)}
         return self.async_show_form(
             step_id="controllers",
@@ -269,6 +337,25 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders=description_placeholders,
         )
+
+    async def async_step_channel_counts(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                self._controller_data[CONF_CONTROLLERS] = _apply_channel_counts(controllers, user_input)
+            except Exception:  # noqa: BLE001
+                errors["base"] = "invalid_channel_count"
+            else:
+                return await self.async_step_channel_descriptions()
+        return self.async_show_form(step_id="channel_counts", data_schema=_channel_counts_schema(controllers), errors=errors)
+
+    async def async_step_channel_descriptions(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        if user_input is not None:
+            self._controller_data[CONF_CONTROLLERS] = _apply_channel_descriptions(controllers, user_input)
+            return await self.async_step_options()
+        return self.async_show_form(step_id="channel_descriptions", data_schema=_channel_descriptions_schema(controllers))
 
     async def async_step_options(self, user_input: dict | None = None):
         if user_input is not None:
@@ -322,6 +409,7 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
                 controllers = _controller_list_from_text(
                     str(user_input.get(CONF_CONTROLLER_SLAVES, "")),
                     str(user_input.get(CONF_CONTROLLER_NAMES, "")),
+                    existing=list(data.get(CONF_CONTROLLERS, [])),
                 )
             except ValueError as exc:
                 errors[CONF_CONTROLLER_SLAVES] = str(exc) or "invalid_slave"
@@ -348,7 +436,7 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
                             CONF_CONTROLLER_NAMES: user_input.get(CONF_CONTROLLER_NAMES, ""),
                             CONF_REQUIRE_ONLINE: require_online,
                         }
-                        return await self.async_step_polling()
+                        return await self.async_step_channel_counts()
                 else:
                     self._controller_data = {
                         CONF_CONTROLLERS: controllers,
@@ -356,7 +444,7 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
                         CONF_CONTROLLER_NAMES: user_input.get(CONF_CONTROLLER_NAMES, ""),
                         CONF_REQUIRE_ONLINE: require_online,
                     }
-                    return await self.async_step_polling()
+                    return await self.async_step_channel_counts()
         description_placeholders = {"offline": ", ".join(str(item) for item in self._last_offline)}
         return self.async_show_form(
             step_id="controllers",
@@ -364,6 +452,25 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
             errors=errors,
             description_placeholders=description_placeholders,
         )
+
+    async def async_step_channel_counts(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                self._controller_data[CONF_CONTROLLERS] = _apply_channel_counts(controllers, user_input)
+            except Exception:  # noqa: BLE001
+                errors["base"] = "invalid_channel_count"
+            else:
+                return await self.async_step_channel_descriptions()
+        return self.async_show_form(step_id="channel_counts", data_schema=_channel_counts_schema(controllers), errors=errors)
+
+    async def async_step_channel_descriptions(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        if user_input is not None:
+            self._controller_data[CONF_CONTROLLERS] = _apply_channel_descriptions(controllers, user_input)
+            return await self.async_step_polling()
+        return self.async_show_form(step_id="channel_descriptions", data_schema=_channel_descriptions_schema(controllers))
 
     async def async_step_polling(self, user_input: dict | None = None):
         data = {**self.config_entry.data, **self.config_entry.options}

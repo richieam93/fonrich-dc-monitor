@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
+    DEFAULT_CHANNEL_COUNT,
     DOMAIN,
 )
 from .coordinator import ControllerConfig, FonrichHub
@@ -126,6 +127,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FonrichConfigEntry) -> b
                 name=item["name"],
                 slave=int(item["slave"]),
                 enabled=bool(item.get("enabled", True)),
+                channel_count=int(item.get("channel_count", DEFAULT_CHANNEL_COUNT)),
+                channel_descriptions=tuple(item.get("channel_descriptions", [])),
             )
         )
 

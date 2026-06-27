@@ -119,3 +119,28 @@ Jede Adresse erzeugt automatisch ein eigenes Home-Assistant-Gerät mit Sensoren,
 ## Mehrere Gateways
 
 Für mehrere HF2211-Gateways die Integration einfach mehrfach hinzufügen. Jedes Gateway bekommt eine eigene IP/Port-Kombination, eigene Controller-Liste und eigene Abfrageintervalle.
+
+
+## Neu in v0.5.0
+
+- Beim Hinzufuegen wird nach der Controller-Liste eine eigene Seite fuer die Kanalanzahl pro Controller angezeigt.
+- Die Kanalanzahl wird als normales Zahlenfeld eingetragen, kein Schieberegler.
+- Danach folgt eine Seite fuer Kanalbeschreibungen. Pro Controller eine Zeile pro Kanal, z. B. `Dach Ost String 1`.
+- Sensoren und Binary-Sensoren werden nur fuer die aktivierte Kanalanzahl erstellt.
+- Kanalbeschreibungen werden als Entity-Namen-Anhang und als Attribute `channel` und `channel_description` gesetzt.
+- Die Dashboard-Karten lesen die Kanalbeschreibungen automatisch und zeigen nur die konfigurierten Kanaele an.
+
+Beispiel:
+
+```text
+Controller: 240,241,242
+Kanalanzahl 240: 8
+Kanalanzahl 241: 6
+Kanalanzahl 242: 4
+
+Kanalbeschreibungen 240:
+Dach Ost String 1
+Dach Ost String 2
+Dach West String 1
+...
+```

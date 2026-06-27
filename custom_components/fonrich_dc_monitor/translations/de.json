@@ -43,6 +43,16 @@
           "startup_stagger_seconds": "Start-Staffelung zwischen Kategorien (Sekunden)",
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
         }
+      },
+      "channel_counts": {
+        "title": "Kanalanzahl pro Controller",
+        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 8 Kanäle pro Controller.",
+        "data": {}
+      },
+      "channel_descriptions": {
+        "title": "Kanalbeschreibungen",
+        "description": "Pro Controller eine Zeile pro Kanal eintragen. Beispiel: Dach Ost String 1. Diese Beschreibung wird an Sensoren, Binary-Sensoren und Karten weitergegeben.",
+        "data": {}
       }
     },
     "error": {
@@ -51,7 +61,8 @@
       "invalid_slave": "Ungültige Slave-Adresse. Erlaubt sind Zahlen von 1 bis 247.",
       "duplicate_slave": "Eine Slave-Adresse wurde doppelt eingetragen.",
       "no_slaves": "Bitte mindestens eine Slave-Adresse eintragen.",
-      "unknown": "Unbekannter Fehler"
+      "unknown": "Unbekannter Fehler",
+      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 8."
     },
     "abort": {
       "already_configured": "Dieses Gateway ist bereits eingerichtet"
@@ -101,7 +112,20 @@
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage"
         },
         "description": "Intervalle, optionale Registergruppen und Bus-Schonung einstellen."
+      },
+      "channel_counts": {
+        "title": "Kanalanzahl pro Controller",
+        "description": "Hier pro Controller die Anzahl aktiver Kanäle als Zahl eintragen. Keine Schieberegler. Der FR-DCMG-MMPS hat maximal 8 Kanäle pro Controller.",
+        "data": {}
+      },
+      "channel_descriptions": {
+        "title": "Kanalbeschreibungen",
+        "description": "Pro Controller eine Zeile pro Kanal eintragen. Diese Beschreibung wird an Sensoren, Binary-Sensoren und Karten weitergegeben.",
+        "data": {}
       }
+    },
+    "error": {
+      "invalid_channel_count": "Ungültige Kanalanzahl. Erlaubt sind 1 bis 8."
     }
   }
 }
