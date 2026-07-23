@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0
+
+- Drei Huawei-Wechselrichter und zwei Huawei-Batteriespeicher vollständig in Solar Flow und neuer Huawei-Solarzentrale unterstützt.
+- Automatische Erkennung der konkreten Huawei-Entity-IDs aus der Anlage.
+- Manueller, robuster Karteneditor mit beschreibbaren Textfeldern und Entity-Vorschlagslisten.
+- Erweiterte Wechselrichter- und Batterieinformationen.
+- Stringnamen je Kasten/Kanal bleiben frei konfigurierbar.
+
+## 1.1.0
+
+- visuellen Karteneditor vollständig neu aufgebaut
+- Editor wird während Texteingabe oder geöffneten Dropdown-Menüs nicht mehr durch Sensor-Updates neu gerendert
+- native Home-Assistant-`ha-form`-Selektoren für Entities, Zahlen, Schalter und Dropdowns
+- Entity-Picker für Wechselrichter, Haus, Netz, Batterieleistung und Batterie-SOC
+- bis zu drei Wechselrichter und drei Batterien in der Solar-Energieflusskarte
+- eigene Namen für jeden Kasten und jeden einzelnen String pro Karte
+- Kanalnamen werden in Modern-, Solar-, Tabellen-, Balken-, Kasten- und Flowkarten verwendet
+- Energieflusskarte in Wechselrichter-, Batteriespeicher-, Haus- und Netzbereiche gegliedert
+- bisherige Felder `inverter_power_entity`, `battery_power_entity` und `battery_soc_entity` bleiben kompatibel
+
 ## 1.0.0
 
 - Fehler der alten Karte `custom:fonrich-modern-production-card` behoben
