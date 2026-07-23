@@ -1,6 +1,6 @@
-// Fonrich DC Monitor dashboard cards - integration v1.0.0
+// Fonrich DC Monitor dashboard cards - integration v1.0.1
 (() => {
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.1';
   const DOCS_URL = 'https://github.com/richieam93/fonrich-dc-monitor';
   const LOAD_KEY = `fonrich-dashboard-${VERSION}`;
 
@@ -906,7 +906,15 @@
   for (const [name, cardClass] of aliases) safeDefine(name, cardClass);
 
   const allFonrichTypes = new Set([...definitions, ...aliases].map(([name]) => name));
-  window.customCards = (window.customCards || []).filter((item) => !allFonrichTypes.has(item.type));
+
+  // Keep the original registry array object. Home Assistant can retain a reference
+  // to window.customCards while the picker is created. Replacing the array with
+  // filter() can therefore make newly pushed cards invisible until a full frontend
+  // rebuild. Mutating the existing array in place keeps every picker reference live.
+  const getCustomCardRegistry = () => {
+    if (!Array.isArray(window.customCards)) window.customCards = [];
+    return window.customCards;
+  };
 
   const suggestionFor = (cardType, hass, entityId) => {
     const state = hass?.states?.[entityId];
@@ -943,20 +951,45 @@
     { type: 'fonrich-dashboard-diagnostics-card', name: 'Fonrich Busdiagnose', description: 'Abfragezeiten, Fehlerzähler und Kommunikationszustand' },
   ];
 
-  for (const card of cards) {
-    window.customCards.push({
-      ...card,
-      preview: true,
-      documentationURL: DOCS_URL,
-      getEntitySuggestion: (hass, entityId) => suggestionFor(card.type, hass, entityId),
-    });
-  }
+  const registerCardsInPicker = () => {
+    const registry = getCustomCardRegistry();
+
+    // Remove previous Fonrich picker records in place, without replacing the array.
+    for (let index = registry.length - 1; index >= 0; index -= 1) {
+      if (allFonrichTypes.has(registry[index]?.type)) registry.splice(index, 1);
+    }
+
+    for (const card of cards) {
+      registry.push({
+        ...card,
+        preview: false,
+        documentationURL: DOCS_URL,
+        getEntitySuggestion: (hass, entityId) => suggestionFor(card.type, hass, entityId),
+      });
+    }
+
+    window.dispatchEvent(new CustomEvent('fonrich-custom-cards-registered', {
+      detail: { version: VERSION, count: cards.length },
+    }));
+    console.info(`Fonrich: ${cards.length} Karten im Karten-Picker registriert`,
+      cards.map((card) => card.type));
+  };
+
+  // Register immediately. The delayed registrations repair the list when another
+  // frontend resource initializes or rewrites the registry shortly after startup.
+  // Duplicate entries are removed on every pass.
+  registerCardsInPicker();
+  queueMicrotask(registerCardsInPicker);
+  setTimeout(registerCardsInPicker, 250);
+  setTimeout(registerCardsInPicker, 1500);
 
   window.FonrichDashboardDebug = {
     version: VERSION,
     buildModel: buildFonrichModel,
     inferRole,
     looksLikeFonrich,
+    registerCardsInPicker,
+    listPickerCards: () => getCustomCardRegistry().filter((item) => allFonrichTypes.has(item?.type)),
   };
 
   window.dispatchEvent(new Event('fonrich-dashboard-loaded'));

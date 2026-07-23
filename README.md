@@ -2,9 +2,9 @@
 
 Custom Integration für Fonrich FR-DCMG-MMPS über einen TCP/RS485-Gateway wie den HF2211.
 
-## Version 1.0.0
+## Version 1.0.1
 
-Diese Version behebt die fehlerhafte Nullanzeige der bisherigen Karte `custom:fonrich-modern-production-card` und ergänzt moderne Solar-Monitor- und Energieflusskarten.
+Diese Version repariert zusätzlich die Registrierung im Home-Assistant-Karten-Picker und behebt weiterhin die fehlerhafte Nullanzeige der bisherigen Karte `custom:fonrich-modern-production-card` und ergänzt moderne Solar-Monitor- und Energieflusskarten.
 
 Die Karten erkennen jetzt zwei Varianten:
 
@@ -12,6 +12,11 @@ Die Karten erkennen jetzt zwei Varianten:
 2. bestehende Entity-IDs wie `sensor.kasten_v1_gesamtleistung`, `sensor.kasten_v2_kanal_01_ampere` und `binary_sensor.kasten_v3_status_online`
 
 Damit funktionieren auch bestehende Installationen und ältere Entity-Registrierungen.
+
+
+### Karten-Picker-Fix in 1.0.1
+
+Die Ressource ersetzt `window.customCards` nicht mehr durch ein neues Array. Stattdessen wird die bestehende Registrierung direkt aktualisiert, damit der geöffnete Home-Assistant-Karten-Picker die Fonrich-Karten zuverlässig sieht. Die Registrierung wird kurz nach dem Laden nochmals duplikatfrei geprüft.
 
 ## Entitäten pro Kasten
 

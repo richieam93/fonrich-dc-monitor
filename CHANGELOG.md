@@ -20,3 +20,9 @@
 - Alte und nicht gepflegte Kartentypen entfernt
 - Sechs Karten im visuellen Karteneditor
 - Schutz-, Alarm- und Testfunktionen ergänzt
+
+## 1.0.1
+- Karten-Picker-Registrierung repariert: `window.customCards` wird nicht mehr ersetzt, sondern in-place aktualisiert.
+- Mehrstufige, duplikatfreie Nachregistrierung für den Home-Assistant-Karten-Picker.
+- Karten-Preview im Picker deaktiviert, damit keine Vorschau ohne vollständige Konfiguration die Auswahl blockiert.
+- Debug-Helfer `FonrichDashboardDebug.listPickerCards()` und `registerCardsInPicker()` ergänzt.
