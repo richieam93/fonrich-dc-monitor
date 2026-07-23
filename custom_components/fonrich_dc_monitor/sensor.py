@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfElectricCurrent, UnitOfElectricPotential, UnitOfPower
+from homeassistant.const import UnitOfElectricCurrent, UnitOfElectricPotential
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -63,6 +63,10 @@ def _production_register(description: RegisterDescription) -> bool:
 
 
 def _sensor_enabled(hub: FonrichHub, description: RegisterDescription) -> bool:
+    # Safety configuration registers are represented by one readable status sensor,
+    # never as raw entities in the normal device view.
+    if description.category == "safety":
+        return False
     profile = str(hub.options.get(CONF_SENSOR_PROFILE, DEFAULT_SENSOR_PROFILE))
 
     if profile == SENSOR_PROFILE_PRODUCTION:
@@ -82,7 +86,9 @@ def _sensor_enabled(hub: FonrichHub, description: RegisterDescription) -> bool:
         return False
     if description.category == "arc_intensity" and not hub.options.get(CONF_ENABLE_ARC_INTENSITY, False):
         return False
-    if description.key.endswith("_mask") and not hub.options.get(CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS):
+    if ("_ch_1_16" in description.key or "_ch_17_24" in description.key) and not hub.options.get(
+        CONF_ENABLE_ALARM_MASKS, DEFAULT_ENABLE_ALARM_MASKS
+    ):
         return False
     return True
 
@@ -106,14 +112,14 @@ ALARM_STATUS_1_BITS = [
 ]
 
 CHANNEL_MASKS = [
-    ("arc_alarm_ch_1_8", "Lichtbogen"),
-    ("reverse_current_alarm_mask", "Rückstrom"),
-    ("no_current_alarm_mask", "Kein Strom"),
-    ("undercurrent_alarm_mask", "Unterstrom"),
-    ("overcurrent_alarm_mask", "Überstrom"),
-    ("current_low_alarm_mask", "Strom zu niedrig"),
-    ("current_high_alarm_mask", "Strom zu hoch"),
-    ("arc_selfcheck_fail_mask", "Lichtbogen-Selbsttestfehler"),
+    ("Lichtbogen", "arc_alarm_ch_1_16", "arc_alarm_ch_17_24"),
+    ("Rückstrom", "reverse_current_alarm_ch_1_16", "reverse_current_alarm_ch_17_24"),
+    ("Kein Strom", "no_current_alarm_ch_1_16", "no_current_alarm_ch_17_24"),
+    ("Unterstrom", "undercurrent_alarm_ch_1_16", "undercurrent_alarm_ch_17_24"),
+    ("Überstrom", "overcurrent_alarm_ch_1_16", "overcurrent_alarm_ch_17_24"),
+    ("Strom zu niedrig", "current_low_alarm_ch_1_16", "current_low_alarm_ch_17_24"),
+    ("Strom zu hoch", "current_high_alarm_ch_1_16", "current_high_alarm_ch_17_24"),
+    ("Lichtbogen-Selbsttestfehler", "arc_selfcheck_fail_ch_1_16", "arc_selfcheck_fail_ch_17_24"),
 ]
 
 
@@ -129,13 +135,24 @@ def _channel_name(controller: ControllerConfig, channel: int) -> str:
     return base
 
 
+def _channel_message(controller: ControllerConfig, channel: int, label: str) -> str:
+    text = f"{label} bei {controller.display_name}, Kanal {channel:02d}"
+    description = controller.channel_description(channel).strip()
+    if description and description.lower() not in {f"kanal {channel}", f"kanal {channel:02d}"}:
+        text += f" ({description})"
+    return text
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     hub: FonrichHub = entry.runtime_data
-    entities: list[SensorEntity] = []
+    entities: list[SensorEntity] = [FonrichGatewayStatusSensor(hub)]
+
+    if hub.safety_test_buttons_enabled:
+        entities.extend(FonrichSafetyTestStatusSensor(hub, controller) for controller in hub.controllers)
 
     if _alarm_text_enabled(hub):
         entities.append(FonrichGatewayAlarmTextSensor(hub))
@@ -200,19 +217,34 @@ class FonrichSensor(FonrichEntity, SensorEntity):
             return f"{prefix} {suffix}".strip()
         return description.name
 
+    def _role(self) -> str:
+        if self.key == "voltage":
+            return "controller_voltage"
+        if self.key == "total_current":
+            return "controller_total_current"
+        if self.key == "total_power_direct":
+            return "controller_total_power"
+        if self.channel is not None and self.key.endswith("_current"):
+            return "channel_current"
+        if self.channel is not None and self.key.endswith("_power_direct"):
+            return "channel_power"
+        return "register_sensor"
+
     @property
     def native_value(self):
         return self.hub.get_value(self.controller_id, self.key)
 
     @property
     def extra_state_attributes(self):
-        if self.channel is None:
-            return {"controller_slave": self.controller.slave}
-        return {
-            "channel": self.channel,
-            "channel_description": self.controller.channel_description(self.channel),
-            "controller_slave": self.controller.slave,
-        }
+        data = self.fonrich_attributes(self._role())
+        if self.channel is not None:
+            data.update(
+                {
+                    "channel": self.channel,
+                    "channel_description": self.controller.channel_description(self.channel),
+                }
+            )
+        return data
 
 
 class FonrichChannelVoltageSensor(FonrichEntity, SensorEntity):
@@ -238,9 +270,9 @@ class FonrichChannelVoltageSensor(FonrichEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
+            **self.fonrich_attributes("channel_voltage"),
             "channel": self.channel,
             "channel_description": self.controller.channel_description(self.channel),
-            "controller_slave": self.controller.slave,
             "source": "controller_bus_voltage",
             "note": "Der Fonrich liefert eine gemeinsame Busspannung pro Kasten; dieser Wert wird dem Kanal zugeordnet.",
         }
@@ -273,10 +305,100 @@ class FonrichDailyMaxCurrentSensor(FonrichEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
+            **self.fonrich_attributes("channel_daily_max_current"),
             "channel": self.channel,
             "channel_description": self.controller.channel_description(self.channel),
-            "controller_slave": self.controller.slave,
             "period": "today",
+        }
+
+
+class FonrichSafetyTestStatusSensor(FonrichEntity, SensorEntity):
+    """Show whether the guarded remote main-switch trip test is configured and armed."""
+
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig) -> None:
+        super().__init__(hub, controller, "safety_test_status")
+        self.entity_description = SensorEntityDescription(key="safety_test_status")
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_safety_test_status"
+        self._attr_name = "Schutz-Teststatus"
+        self._attr_icon = "mdi:shield-alert-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self):
+        if not self.hub.available.get(self.controller_id, False):
+            return "Kasten offline"
+        if self.hub.remote_trip_is_armed(self.controller_id):
+            return "Hauptschalter-Test freigegeben"
+        config = self.hub.remote_trip_configuration(self.controller_id)
+        if config["alarm_enabled"] is None or config["action_enabled"] is None:
+            return "Prüfung ausstehend"
+        return "Bereit" if config["ready"] else "Remote-Auslösung nicht freigegeben"
+
+    @property
+    def extra_state_attributes(self):
+        config = self.hub.remote_trip_configuration(self.controller_id)
+        return {
+            **self.fonrich_attributes("safety_test_status"),
+            **config,
+            "remote_trip_armed": self.hub.remote_trip_is_armed(self.controller_id),
+            "remote_trip_armed_until": self.hub.remote_trip_armed_until(self.controller_id),
+            "required_alarm_register": 2849,
+            "required_action_register": 2852,
+            "required_bit": 14,
+            "hardware_warning": "Der Hauptschalter-Test kann den realen Shunt-Auslöser betätigen.",
+            "lightning_test_scope": "Nur Home-Assistant-Meldung; keine Hardware-Auslösung.",
+        }
+
+
+class FonrichGatewayStatusSensor(SensorEntity):
+    """Compact health sensor for the configured gateway and all controllers."""
+
+    _attr_has_entity_name = False
+
+    def __init__(self, hub: FonrichHub) -> None:
+        self.hub = hub
+        self.entity_description = SensorEntityDescription(key="gateway_status")
+        self._remove_callback = None
+        self._attr_unique_id = f"{hub.gateway_uid}_gateway_status"
+        self._attr_name = "Fonrich Gateway Status"
+        self._attr_icon = "mdi:lan-connect"
+
+    async def async_added_to_hass(self) -> None:
+        self._remove_callback = self.hub.callbacks.add(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._remove_callback:
+            self._remove_callback()
+            self._remove_callback = None
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self):
+        total = len(self.hub.controllers)
+        online = sum(1 for controller in self.hub.controllers if self.hub.available.get(controller.controller_id, False))
+        return f"{online}/{total} online"
+
+    @property
+    def extra_state_attributes(self):
+        online = [c.display_name for c in self.hub.controllers if self.hub.available.get(c.controller_id, False)]
+        offline = [c.display_name for c in self.hub.controllers if not self.hub.available.get(c.controller_id, False)]
+        return {
+            "fonrich_integration": True,
+            "fonrich_role": "gateway_status",
+            "fonrich_key": "gateway_status",
+            "host": self.hub.client.host,
+            "port": self.hub.client.port,
+            "controller_count": len(self.hub.controllers),
+            "online_count": len(online),
+            "offline_count": len(offline),
+            "online_controllers": online,
+            "offline_controllers": offline,
         }
 
 
@@ -302,18 +424,16 @@ class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
         return "OK" if not messages else "; ".join(messages)[:255]
 
     def alarm_messages(self) -> list[str]:
-        messages: list[str] = []
+        messages: list[str] = list(self.hub.get_test_messages(self.controller_id))
         controller_name = self.controller.display_name
 
-        for key, label in CHANNEL_MASKS:
-            raw = self.hub.get_raw_value(self.controller_id, key) or 0
-            for channel in range(1, min(int(self.controller.channel_count), 16) + 1):
-                if raw & (1 << (channel - 1)):
-                    text = f"{label} bei {controller_name}, Kanal {channel:02d}"
-                    description = self.controller.channel_description(channel).strip()
-                    if description and description.lower() not in {f"kanal {channel}", f"kanal {channel:02d}"}:
-                        text += f" ({description})"
-                    messages.append(text)
+        for label, key_1_16, key_17_24 in CHANNEL_MASKS:
+            for channel in range(1, int(self.controller.channel_count) + 1):
+                source_key = key_1_16 if channel <= 16 else key_17_24
+                bit_index = channel - 1 if channel <= 16 else channel - 17
+                raw = self.hub.get_raw_value(self.controller_id, source_key) or 0
+                if raw & (1 << bit_index):
+                    messages.append(_channel_message(self.controller, channel, label))
 
         alarm_1 = self.hub.get_raw_value(self.controller_id, "alarm_status_1") or 0
         exact_labels = {message.split(" bei ", 1)[0] for message in messages}
@@ -322,19 +442,35 @@ class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
                 continue
             if label == "Kanal-Lichtbogen" and "Lichtbogen" in exact_labels:
                 continue
-            if label in {"Kanal-Rückstrom", "Kanal ohne Strom", "Kanal-Unterstrom", "Kanal-Überstrom", "Kanalstrom zu niedrig", "Kanalstrom zu hoch"}:
-                normalized = label.replace("Kanal-", "").replace("Kanal", "").strip()
-                if any(normalized.lower() in item.lower() for item in messages):
-                    continue
+            normalized = label.replace("Kanal-", "").replace("Kanal", "").strip().lower()
+            if normalized and any(normalized in item.lower() for item in messages):
+                continue
             messages.append(f"{label} bei {controller_name}")
 
         alarm_2 = self.hub.get_raw_value(self.controller_id, "alarm_status_2") or 0
-        if alarm_2:
-            messages.append(f"Weitere Alarmmeldung bei {controller_name} (Code {alarm_2})")
+        for index in range(1, 5):
+            if alarm_2 & (1 << (index - 1)):
+                messages.append(f"{self.controller.di_description(index)} Alarm bei {controller_name}")
+        if alarm_2 & (1 << 4):
+            messages.append(f"Sammelalarm bei {controller_name}")
+        unknown_alarm_2 = alarm_2 & ~0x001F
+        if unknown_alarm_2:
+            messages.append(f"Weitere Alarmmeldung bei {controller_name} (Code {unknown_alarm_2})")
 
-        trip_values = [self.hub.get_raw_value(self.controller_id, f"trip_status_{index}") or 0 for index in range(1, 4)]
-        if any(trip_values):
-            messages.append(f"Trip aktiv bei {controller_name}")
+        trip_1 = self.hub.get_raw_value(self.controller_id, "trip_status_1") or 0
+        trip_2 = self.hub.get_raw_value(self.controller_id, "trip_status_2") or 0
+        trip_3 = self.hub.get_raw_value(self.controller_id, "trip_status_3") or 0
+        if trip_1:
+            messages.append(f"Schutzauslösung aktiv bei {controller_name}")
+        for index in range(1, 5):
+            if trip_2 & (1 << (index - 1)):
+                messages.append(f"{self.controller.di_description(index)} hat eine Schutzauslösung bei {controller_name} verursacht")
+        if trip_2 & (1 << 4):
+            messages.append(f"Sammelalarm hat eine Schutzauslösung bei {controller_name} verursacht")
+        if trip_2 & (1 << 14):
+            messages.append(f"Remote-Hauptschalter-Auslösung aktiv bei {controller_name}")
+        if trip_3:
+            messages.append(f"Gesamt-Trip aktiv bei {controller_name}")
 
         result: list[str] = []
         for message in messages:
@@ -346,11 +482,11 @@ class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
     def extra_state_attributes(self):
         messages = self.alarm_messages()
         return {
-            "controller": self.controller.display_name,
-            "controller_slave": self.controller.slave,
+            **self.fonrich_attributes("controller_messages"),
             "online": self.hub.available.get(self.controller_id, False),
             "active_message_count": len(messages),
             "active_messages": messages,
+            "test_messages": self.hub.get_test_messages(self.controller_id),
             "last_error": self.hub.last_error.get(self.controller_id),
         }
 
@@ -390,6 +526,7 @@ class FonrichGatewayAlarmTextSensor(SensorEntity):
         for controller in self.hub.controllers:
             if not self.hub.available.get(controller.controller_id, False):
                 messages.append(f"{controller.display_name} offline")
+                messages.extend(self.hub.get_test_messages(controller.controller_id))
                 continue
             messages.extend(FonrichControllerAlarmTextSensor(self.hub, controller).alarm_messages())
         result: list[str] = []
@@ -402,6 +539,9 @@ class FonrichGatewayAlarmTextSensor(SensorEntity):
     def extra_state_attributes(self):
         messages = self.all_messages()
         return {
+            "fonrich_integration": True,
+            "fonrich_role": "gateway_messages",
+            "fonrich_key": "gateway_alarm_text",
             "active_message_count": len(messages),
             "active_messages": messages,
             "online_controllers": [

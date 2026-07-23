@@ -4,9 +4,12 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -18,9 +21,12 @@ from .const import (
     CONF_ENABLE_ENERGY,
     CONF_ENABLE_HISTORY,
     CONF_ENABLE_POWER,
+    CONF_ENABLE_SAFETY_TEST_BUTTONS,
     CONF_INTER_CONTROLLER_DELAY_MS,
     CONF_INTER_REQUEST_DELAY_MS,
     CONF_MAX_REGISTERS_PER_REQUEST,
+    CONF_OFFLINE_AFTER_FAILURES,
+    CONF_REMOTE_TRIP_ARM_SECONDS,
     CONF_SCAN_ALARM,
     CONF_SCAN_ARC_INTENSITY,
     CONF_SCAN_BASE,
@@ -29,15 +35,20 @@ from .const import (
     CONF_SCAN_POWER,
     CONF_SENSOR_PROFILE,
     CONF_STARTUP_STAGGER_SECONDS,
+    CONF_TEST_MESSAGE_SECONDS,
+    DEFAULT_DI_DESCRIPTIONS,
     DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
     DEFAULT_ENABLE_ALARM_MASKS,
     DEFAULT_ENABLE_ALARM_TEXT_SENSOR,
     DEFAULT_ENABLE_ENERGY,
     DEFAULT_ENABLE_HISTORY,
     DEFAULT_ENABLE_POWER,
+    DEFAULT_ENABLE_SAFETY_TEST_BUTTONS,
     DEFAULT_INTER_CONTROLLER_DELAY_MS,
     DEFAULT_INTER_REQUEST_DELAY_MS,
     DEFAULT_MAX_REGISTERS_PER_REQUEST,
+    DEFAULT_OFFLINE_AFTER_FAILURES,
+    DEFAULT_REMOTE_TRIP_ARM_SECONDS,
     DEFAULT_SCAN_ALARM,
     DEFAULT_SCAN_ARC_INTENSITY,
     DEFAULT_SCAN_BASE,
@@ -46,7 +57,15 @@ from .const import (
     DEFAULT_SCAN_POWER,
     DEFAULT_SENSOR_PROFILE,
     DEFAULT_STARTUP_STAGGER_SECONDS,
+    DEFAULT_TEST_MESSAGE_SECONDS,
     DOMAIN,
+    REGISTER_ALARM_FUNCTION_MGMT_2,
+    REGISTER_ARC_SELFTEST,
+    REGISTER_CLEAR_ALARM_TRIP,
+    REGISTER_CLEAR_ARC_HISTORY,
+    REGISTER_REMOTE_MANUAL_TRIP,
+    REGISTER_TRIP_ACTION_MGMT_2,
+    REMOTE_TRIP_ENABLE_BIT,
     SENSOR_PROFILE_DIAGNOSTIC,
     SENSOR_PROFILE_PRODUCTION,
     SENSOR_PROFILE_STANDARD,
@@ -72,6 +91,7 @@ class ControllerConfig:
     enabled: bool = True
     channel_count: int = 8
     channel_descriptions: tuple[str, ...] = ()
+    di_descriptions: tuple[str, ...] = DEFAULT_DI_DESCRIPTIONS
 
     @property
     def display_name(self) -> str:
@@ -92,6 +112,15 @@ class ControllerConfig:
         if index < len(self.channel_descriptions):
             return self.channel_descriptions[index]
         return ""
+
+    def di_description(self, index: int) -> str:
+        if index < 1 or index > 4:
+            return f"DI{index}"
+        if index - 1 < len(self.di_descriptions):
+            description = str(self.di_descriptions[index - 1]).strip()
+            if description:
+                return description
+        return f"DI{index}"
 
 
 class FonrichHub:
@@ -114,6 +143,12 @@ class FonrichHub:
         self.raw: dict[str, dict[str, int | None]] = {c.controller_id: {} for c in self.controllers}
         self.available: dict[str, bool] = {c.controller_id: False for c in self.controllers}
         self.last_error: dict[str, str | None] = {c.controller_id: None for c in self.controllers}
+        self.last_success: dict[str, str | None] = {c.controller_id: None for c in self.controllers}
+        self.last_attempt: dict[str, str | None] = {c.controller_id: None for c in self.controllers}
+        self.consecutive_errors: dict[str, int] = {c.controller_id: 0 for c in self.controllers}
+        self.successful_polls: dict[str, int] = {c.controller_id: 0 for c in self.controllers}
+        self.failed_polls: dict[str, int] = {c.controller_id: 0 for c in self.controllers}
+        self.category_errors: dict[str, dict[str, str]] = {c.controller_id: {} for c in self.controllers}
         self.callbacks = CallbackRegistry()
         self._tasks: list[asyncio.Task] = []
         self._stopped = asyncio.Event()
@@ -126,6 +161,12 @@ class FonrichHub:
         self.daily_max_current: dict[str, dict[int, float]] = {
             c.controller_id: {channel: 0.0 for channel in range(1, c.channel_count + 1)}
             for c in self.controllers
+        }
+        self._remote_trip_armed_until: dict[str, datetime | None] = {
+            c.controller_id: None for c in self.controllers
+        }
+        self._test_messages: dict[str, dict[str, tuple[str, datetime]]] = {
+            c.controller_id: {} for c in self.controllers
         }
 
     @property
@@ -142,6 +183,7 @@ class FonrichHub:
             "history": int(self.options.get(CONF_SCAN_HISTORY, DEFAULT_SCAN_HISTORY)),
             "arc_intensity": int(self.options.get(CONF_SCAN_ARC_INTENSITY, DEFAULT_SCAN_ARC_INTENSITY)),
             "diagnostic": int(self.options.get(CONF_SCAN_BASE, DEFAULT_SCAN_BASE)),
+            "safety": 60,
         }
 
     @property
@@ -155,6 +197,14 @@ class FonrichHub:
     @property
     def max_registers_per_request(self) -> int:
         return int(self.options.get(CONF_MAX_REGISTERS_PER_REQUEST, DEFAULT_MAX_REGISTERS_PER_REQUEST))
+
+    @property
+    def offline_after_failures(self) -> int:
+        return max(1, int(self.options.get(CONF_OFFLINE_AFTER_FAILURES, DEFAULT_OFFLINE_AFTER_FAILURES)))
+
+    @property
+    def safety_test_buttons_enabled(self) -> bool:
+        return bool(self.options.get(CONF_ENABLE_SAFETY_TEST_BUTTONS, DEFAULT_ENABLE_SAFETY_TEST_BUTTONS))
 
     def production_only(self) -> bool:
         return self.sensor_profile == SENSOR_PROFILE_PRODUCTION
@@ -184,6 +234,8 @@ class FonrichHub:
             categories.append("history")
         if self.options.get(CONF_ENABLE_ARC_INTENSITY, False):
             categories.append("arc_intensity")
+        if self.safety_test_buttons_enabled:
+            categories.append("safety")
         return categories
 
     async def start(self) -> None:
@@ -208,7 +260,7 @@ class FonrichHub:
 
     async def _poll_loop(self, category: str) -> None:
         stagger = int(self.options.get(CONF_STARTUP_STAGGER_SECONDS, DEFAULT_STARTUP_STAGGER_SECONDS))
-        order = {"base": 0, "power": 1, "alarm": 2, "energy": 3, "diagnostic": 4, "history": 5, "arc_intensity": 6}
+        order = {"base": 0, "power": 1, "alarm": 2, "safety": 3, "energy": 4, "diagnostic": 5, "history": 6, "arc_intensity": 7}
         initial_delay = 1 + order.get(category, 0) * stagger
         try:
             await asyncio.wait_for(self._stopped.wait(), timeout=initial_delay)
@@ -236,15 +288,27 @@ class FonrichHub:
             ]
             if not controller_descriptions:
                 continue
+            controller_id = controller.controller_id
+            self.last_attempt[controller_id] = dt_util.now().isoformat()
             try:
                 await self._poll_controller_category(controller, category, controller_descriptions)
-                self.available[controller.controller_id] = True
-                self.last_error[controller.controller_id] = None
+                self.successful_polls[controller_id] += 1
+                self.category_errors[controller_id].pop(category, None)
                 if category == "base":
+                    self.available[controller_id] = True
+                    self.last_success[controller_id] = dt_util.now().isoformat()
+                    self.last_error[controller_id] = None
+                    self.consecutive_errors[controller_id] = 0
                     self._update_daily_max(controller)
             except Exception as exc:  # noqa: BLE001
-                self.available[controller.controller_id] = False
-                self.last_error[controller.controller_id] = str(exc)
+                error_text = f"{category}: {exc}"
+                self.failed_polls[controller_id] += 1
+                self.category_errors[controller_id][category] = str(exc)
+                self.last_error[controller_id] = error_text
+                if category == "base":
+                    self.consecutive_errors[controller_id] += 1
+                    if self.consecutive_errors[controller_id] >= self.offline_after_failures:
+                        self.available[controller_id] = False
                 _LOGGER.debug("Polling %s %s failed: %s", controller.display_name, category, exc)
             await asyncio.sleep(self.inter_controller_delay)
         self.callbacks.notify()
@@ -307,22 +371,199 @@ class FonrichHub:
                 return controller
         return None
 
+    def remote_trip_configuration(self, controller_id: str) -> dict[str, bool | int | None]:
+        """Return the cached remote-trip enable state without changing protection settings."""
+        alarm_raw = self.get_raw_value(controller_id, "remote_trip_alarm_enable_config")
+        action_raw = self.get_raw_value(controller_id, "remote_trip_action_enable_config")
+        alarm_enabled = None if alarm_raw is None else bool(alarm_raw & REMOTE_TRIP_ENABLE_BIT)
+        action_enabled = None if action_raw is None else bool(action_raw & REMOTE_TRIP_ENABLE_BIT)
+        ready = bool(alarm_enabled and action_enabled)
+        return {
+            "alarm_register": alarm_raw,
+            "action_register": action_raw,
+            "alarm_enabled": alarm_enabled,
+            "action_enabled": action_enabled,
+            "ready": ready,
+        }
+
+    async def _async_read_remote_trip_configuration(self, controller: ControllerConfig) -> dict[str, bool | int | None]:
+        """Read and cache both documented remote-trip enable registers."""
+        alarm_raw = (
+            await self.client.read_holding_registers(
+                controller.slave, REGISTER_ALARM_FUNCTION_MGMT_2, 1
+            )
+        )[0]
+        action_raw = (
+            await self.client.read_holding_registers(
+                controller.slave, REGISTER_TRIP_ACTION_MGMT_2, 1
+            )
+        )[0]
+        controller_id = controller.controller_id
+        self.raw[controller_id]["remote_trip_alarm_enable_config"] = alarm_raw
+        self.raw[controller_id]["remote_trip_action_enable_config"] = action_raw
+        self.data[controller_id]["remote_trip_alarm_enable_config"] = alarm_raw
+        self.data[controller_id]["remote_trip_action_enable_config"] = action_raw
+        return self.remote_trip_configuration(controller_id)
+
+    @staticmethod
+    def _remote_trip_missing_config(config: dict[str, bool | int | None]) -> list[str]:
+        missing: list[str] = []
+        if not config.get("alarm_enabled"):
+            missing.append("Register 2849 Bit 14")
+        if not config.get("action_enabled"):
+            missing.append("Register 2852 Bit 14")
+        return missing
+
     async def async_clear_alarm_trip(self, controller: ControllerConfig) -> None:
-        from .const import REGISTER_CLEAR_ALARM_TRIP
         await self.write_register(controller, REGISTER_CLEAR_ALARM_TRIP, 1)
 
     async def async_clear_arc_history(self, controller: ControllerConfig) -> None:
-        from .const import REGISTER_CLEAR_ARC_HISTORY
         await self.write_register(controller, REGISTER_CLEAR_ARC_HISTORY, 1)
 
     async def async_arc_selftest(self, controller: ControllerConfig) -> None:
-        from .const import REGISTER_ARC_SELFTEST
         await self.write_register(controller, REGISTER_ARC_SELFTEST, 1)
 
     async def write_register(self, controller: ControllerConfig, address: int, value: int) -> None:
+        if not self.available.get(controller.controller_id, False):
+            raise HomeAssistantError(f"{controller.display_name} ist offline.")
         await self.client.write_single_register(controller.slave, address, value)
         await self.async_refresh_all()
 
+    # ---------------------------------------------------------------------
+    # Safety-related tests
+    # ---------------------------------------------------------------------
+    def remote_trip_armed_until(self, controller_id: str) -> str | None:
+        until = self._remote_trip_armed_until.get(controller_id)
+        if until is None or until <= dt_util.now():
+            self._remote_trip_armed_until[controller_id] = None
+            return None
+        return until.isoformat()
+
+    def remote_trip_is_armed(self, controller_id: str) -> bool:
+        return self.remote_trip_armed_until(controller_id) is not None
+
+    async def async_arm_remote_trip(self, controller: ControllerConfig) -> None:
+        if not self.safety_test_buttons_enabled:
+            raise HomeAssistantError("Sicherheits-Testbuttons sind in den Optionen deaktiviert.")
+        if not self.available.get(controller.controller_id, False):
+            raise HomeAssistantError(f"{controller.display_name} ist offline.")
+        config = await self._async_read_remote_trip_configuration(controller)
+        if not config["ready"]:
+            missing = self._remote_trip_missing_config(config)
+            raise HomeAssistantError(
+                "Remote-Trip ist im Fonrich nicht vollständig freigegeben ("
+                + ", ".join(missing)
+                + "). Die Integration ändert diese Schutzkonfiguration aus Sicherheitsgründen nicht automatisch."
+            )
+        seconds = max(5, min(60, int(self.options.get(CONF_REMOTE_TRIP_ARM_SECONDS, DEFAULT_REMOTE_TRIP_ARM_SECONDS))))
+        until = dt_util.now() + timedelta(seconds=seconds)
+        self._remote_trip_armed_until[controller.controller_id] = until
+        self._set_test_message(
+            controller,
+            "remote_trip_armed",
+            f"TEST: Hauptschalter-Auslösung bei {controller.display_name} für {seconds} Sekunden freigegeben",
+            seconds,
+        )
+        async_call_later(
+            self.hass,
+            seconds + 0.2,
+            lambda _now: self._expire_remote_trip_arm(controller.controller_id, until),
+        )
+        self.callbacks.notify()
+
+    def _expire_remote_trip_arm(self, controller_id: str, expected_until: datetime) -> None:
+        if self._remote_trip_armed_until.get(controller_id) == expected_until:
+            self._remote_trip_armed_until[controller_id] = None
+            self._test_messages.get(controller_id, {}).pop("remote_trip_armed", None)
+            self.callbacks.notify()
+
+    async def async_remote_trip_test(self, controller: ControllerConfig) -> None:
+        """Trigger the documented remote manual trip command (register 3076).
+
+        The action is deliberately guarded by an integration option, a temporary
+        arm button and verification of the two documented enable bits. The
+        integration never enables these protection bits automatically.
+        """
+        if not self.safety_test_buttons_enabled:
+            raise HomeAssistantError("Sicherheits-Testbuttons sind in den Optionen deaktiviert.")
+        if not self.available.get(controller.controller_id, False):
+            raise HomeAssistantError(f"{controller.display_name} ist offline.")
+        if not self.remote_trip_is_armed(controller.controller_id):
+            raise HomeAssistantError("Zuerst 'Hauptschalter-Test freigeben' drücken. Die Freigabe gilt nur kurz.")
+
+        config = await self._async_read_remote_trip_configuration(controller)
+        if not config["ready"]:
+            self._remote_trip_armed_until[controller.controller_id] = None
+            self._test_messages.get(controller.controller_id, {}).pop("remote_trip_armed", None)
+            self.callbacks.notify()
+            missing = self._remote_trip_missing_config(config)
+            raise HomeAssistantError(
+                "Remote-Trip ist im Fonrich nicht vollständig freigegeben ("
+                + ", ".join(missing)
+                + "). Die Integration ändert diese Schutzkonfiguration aus Sicherheitsgründen nicht automatisch."
+            )
+
+        await self.client.write_single_register(controller.slave, REGISTER_REMOTE_MANUAL_TRIP, 1)
+        self._remote_trip_armed_until[controller.controller_id] = None
+        self._test_messages.get(controller.controller_id, {}).pop("remote_trip_armed", None)
+        self._set_test_message(
+            controller,
+            "remote_trip_executed",
+            f"TEST: Hauptschalter-Auslösung bei {controller.display_name} wurde gesendet",
+            int(self.options.get(CONF_TEST_MESSAGE_SECONDS, DEFAULT_TEST_MESSAGE_SECONDS)),
+        )
+        self.callbacks.notify()
+
+    async def async_lightning_protection_message_test(self, controller: ControllerConfig) -> None:
+        """Create a clearly marked HA-only lightning protection test message.
+
+        The FR-DCMG-MMPS documentation exposes lightning arrester status through
+        physical DI contacts but no Modbus command that can electrically trip a
+        surge protection device. This action therefore tests dashboards and
+        notifications only and never writes a hardware output.
+        """
+        if not self.safety_test_buttons_enabled:
+            raise HomeAssistantError("Sicherheits-Testbuttons sind in den Optionen deaktiviert.")
+        seconds = max(10, min(600, int(self.options.get(CONF_TEST_MESSAGE_SECONDS, DEFAULT_TEST_MESSAGE_SECONDS))))
+        self._set_test_message(
+            controller,
+            "lightning_protection",
+            f"TEST: Blitzschutz-Meldung bei {controller.display_name} (nur Home Assistant, keine Hardware-Auslösung)",
+            seconds,
+        )
+        self.callbacks.notify()
+
+    async def async_clear_test_messages(self, controller: ControllerConfig) -> None:
+        self._test_messages[controller.controller_id] = {}
+        self._remote_trip_armed_until[controller.controller_id] = None
+        self.callbacks.notify()
+
+    def _set_test_message(self, controller: ControllerConfig, key: str, text: str, seconds: int) -> None:
+        expires = dt_util.now() + timedelta(seconds=max(1, seconds))
+        self._test_messages.setdefault(controller.controller_id, {})[key] = (text, expires)
+        async_call_later(
+            self.hass,
+            max(1, seconds) + 0.2,
+            lambda _now: self._expire_test_message(controller.controller_id, key, expires),
+        )
+
+    def _expire_test_message(self, controller_id: str, key: str, expected_expiry: datetime) -> None:
+        current = self._test_messages.get(controller_id, {}).get(key)
+        if current and current[1] == expected_expiry:
+            self._test_messages[controller_id].pop(key, None)
+            self.callbacks.notify()
+
+    def get_test_messages(self, controller_id: str) -> list[str]:
+        now = dt_util.now()
+        messages = self._test_messages.setdefault(controller_id, {})
+        expired = [key for key, (_text, expiry) in messages.items() if expiry <= now]
+        for key in expired:
+            messages.pop(key, None)
+        return [text for text, _expiry in messages.values()]
+
+    # ---------------------------------------------------------------------
+    # Daily maximum current persistence
+    # ---------------------------------------------------------------------
     async def _async_load_daily_max(self) -> None:
         stored = await self._daily_max_store.async_load()
         if not isinstance(stored, dict):

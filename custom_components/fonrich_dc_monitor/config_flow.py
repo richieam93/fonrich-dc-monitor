@@ -47,20 +47,28 @@ from .const import (
     CONF_INTER_CONTROLLER_DELAY_MS,
     CONF_STARTUP_STAGGER_SECONDS,
     CONF_MAX_REGISTERS_PER_REQUEST,
+    CONF_OFFLINE_AFTER_FAILURES,
     CONF_ENABLE_POWER,
     CONF_ENABLE_ENERGY,
     CONF_ENABLE_HISTORY,
     CONF_ENABLE_BUTTONS,
+    CONF_ENABLE_SAFETY_TEST_BUTTONS,
+    CONF_REMOTE_TRIP_ARM_SECONDS,
+    CONF_TEST_MESSAGE_SECONDS,
     CONF_ENABLE_ALARM_MASKS,
     DEFAULT_SCAN_HISTORY,
     DEFAULT_INTER_REQUEST_DELAY_MS,
     DEFAULT_INTER_CONTROLLER_DELAY_MS,
     DEFAULT_STARTUP_STAGGER_SECONDS,
     DEFAULT_MAX_REGISTERS_PER_REQUEST,
+    DEFAULT_OFFLINE_AFTER_FAILURES,
     DEFAULT_ENABLE_POWER,
     DEFAULT_ENABLE_ENERGY,
     DEFAULT_ENABLE_HISTORY,
     DEFAULT_ENABLE_BUTTONS,
+    DEFAULT_ENABLE_SAFETY_TEST_BUTTONS,
+    DEFAULT_REMOTE_TRIP_ARM_SECONDS,
+    DEFAULT_TEST_MESSAGE_SECONDS,
     DEFAULT_ENABLE_ALARM_MASKS,
     CONF_ENABLE_ALARM_BINARY_SENSORS,
     CONF_ENABLE_ALARM_TEXT_SENSOR,
@@ -78,6 +86,8 @@ from .const import (
     SENSOR_PROFILE_DIAGNOSTIC,
     CONF_ENABLE_ARC_INTENSITY,
     DEFAULT_CHANNEL_COUNT,
+    DEFAULT_DI_DESCRIPTIONS,
+    CONF_DI_DESCRIPTIONS,
     MAX_CHANNEL_COUNT,
     DOMAIN,
 )
@@ -121,6 +131,7 @@ def _controller_list_from_text(slaves_text: str, names_text: str = "", existing:
         name = names[idx - 1] if idx <= len(names) else old.get("name", default_name)
         count = int(old.get("channel_count", DEFAULT_CHANNEL_COUNT))
         descriptions = list(old.get("channel_descriptions", []))
+        di_descriptions = list(old.get(CONF_DI_DESCRIPTIONS, DEFAULT_DI_DESCRIPTIONS))
         controllers.append(
             {
                 "id": f"slave_{slave}",
@@ -129,6 +140,7 @@ def _controller_list_from_text(slaves_text: str, names_text: str = "", existing:
                 "enabled": True,
                 "channel_count": count,
                 "channel_descriptions": descriptions,
+                CONF_DI_DESCRIPTIONS: di_descriptions,
             }
         )
     return controllers
@@ -157,6 +169,10 @@ def _channel_desc_key(controller: dict) -> str:
     return f"channel_descriptions_{controller['slave']}"
 
 
+def _di_desc_key(controller: dict) -> str:
+    return f"di_descriptions_{controller['slave']}"
+
+
 def _channel_counts_schema(controllers: list[dict]) -> vol.Schema:
     fields = {}
     for controller in controllers:
@@ -175,6 +191,35 @@ def _channel_descriptions_schema(controllers: list[dict]) -> vol.Schema:
             lines.append(value)
         fields[vol.Optional(_channel_desc_key(controller), default="\n".join(lines))] = str
     return vol.Schema(fields)
+
+
+def _di_descriptions_schema(controllers: list[dict]) -> vol.Schema:
+    fields = {}
+    for controller in controllers:
+        existing = list(controller.get(CONF_DI_DESCRIPTIONS, DEFAULT_DI_DESCRIPTIONS))
+        lines = []
+        for index in range(4):
+            value = existing[index] if index < len(existing) and existing[index] else DEFAULT_DI_DESCRIPTIONS[index]
+            lines.append(str(value))
+        fields[vol.Optional(_di_desc_key(controller), default="\n".join(lines))] = str
+    return vol.Schema(fields)
+
+
+def _apply_di_descriptions(controllers: list[dict], user_input: dict) -> list[dict]:
+    updated = []
+    for controller in controllers:
+        item = dict(controller)
+        raw = str(user_input.get(_di_desc_key(controller), ""))
+        lines = [line.strip() for line in raw.splitlines()]
+        if len(lines) == 1 and "," in raw:
+            lines = [part.strip() for part in raw.split(",")]
+        descriptions = []
+        for index in range(4):
+            value = lines[index] if index < len(lines) and lines[index] else DEFAULT_DI_DESCRIPTIONS[index]
+            descriptions.append(value)
+        item[CONF_DI_DESCRIPTIONS] = descriptions
+        updated.append(item)
+    return updated
 
 
 def _apply_channel_counts(controllers: list[dict], user_input: dict) -> list[dict]:
@@ -274,6 +319,7 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
     enable_alarm_binary = defaults.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
     enable_alarm_text = defaults.get(CONF_ENABLE_ALARM_TEXT_SENSOR, DEFAULT_ENABLE_ALARM_TEXT_SENSOR)
     enable_buttons = defaults.get(CONF_ENABLE_BUTTONS, DEFAULT_ENABLE_BUTTONS)
+    enable_safety_tests = defaults.get(CONF_ENABLE_SAFETY_TEST_BUTTONS, DEFAULT_ENABLE_SAFETY_TEST_BUTTONS)
     enable_daily_max = defaults.get(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT)
     enable_channel_voltage = defaults.get(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE)
     enable_arc = defaults.get(CONF_ENABLE_ARC_INTENSITY, False)
@@ -297,16 +343,20 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
             vol.Required(CONF_ENABLE_ARC_INTENSITY, default=enable_arc): bool,
             vol.Required(CONF_SCAN_ARC_INTENSITY, default=defaults.get(CONF_SCAN_ARC_INTENSITY, DEFAULT_SCAN_ARC_INTENSITY)): vol.All(int, vol.Range(min=10, max=7200)),
             vol.Required(CONF_ENABLE_BUTTONS, default=enable_buttons): bool,
+            vol.Required(CONF_ENABLE_SAFETY_TEST_BUTTONS, default=enable_safety_tests): bool,
+            vol.Required(CONF_REMOTE_TRIP_ARM_SECONDS, default=defaults.get(CONF_REMOTE_TRIP_ARM_SECONDS, DEFAULT_REMOTE_TRIP_ARM_SECONDS)): vol.All(int, vol.Range(min=5, max=60)),
+            vol.Required(CONF_TEST_MESSAGE_SECONDS, default=defaults.get(CONF_TEST_MESSAGE_SECONDS, DEFAULT_TEST_MESSAGE_SECONDS)): vol.All(int, vol.Range(min=10, max=600)),
             vol.Required(CONF_INTER_REQUEST_DELAY_MS, default=defaults.get(CONF_INTER_REQUEST_DELAY_MS, DEFAULT_INTER_REQUEST_DELAY_MS)): vol.All(int, vol.Range(min=0, max=5000)),
             vol.Required(CONF_INTER_CONTROLLER_DELAY_MS, default=defaults.get(CONF_INTER_CONTROLLER_DELAY_MS, DEFAULT_INTER_CONTROLLER_DELAY_MS)): vol.All(int, vol.Range(min=0, max=5000)),
             vol.Required(CONF_STARTUP_STAGGER_SECONDS, default=defaults.get(CONF_STARTUP_STAGGER_SECONDS, DEFAULT_STARTUP_STAGGER_SECONDS)): vol.All(int, vol.Range(min=0, max=120)),
             vol.Required(CONF_MAX_REGISTERS_PER_REQUEST, default=defaults.get(CONF_MAX_REGISTERS_PER_REQUEST, DEFAULT_MAX_REGISTERS_PER_REQUEST)): vol.All(int, vol.Range(min=1, max=60)),
+            vol.Required(CONF_OFFLINE_AFTER_FAILURES, default=defaults.get(CONF_OFFLINE_AFTER_FAILURES, DEFAULT_OFFLINE_AFTER_FAILURES)): vol.All(int, vol.Range(min=1, max=10)),
         }
     )
 
 
 class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         self._connection_data: dict = {}
@@ -393,8 +443,15 @@ class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         controllers = self._controller_data.get(CONF_CONTROLLERS, [])
         if user_input is not None:
             self._controller_data[CONF_CONTROLLERS] = _apply_channel_descriptions(controllers, user_input)
-            return await self.async_step_options()
+            return await self.async_step_di_descriptions()
         return self.async_show_form(step_id="channel_descriptions", data_schema=_channel_descriptions_schema(controllers))
+
+    async def async_step_di_descriptions(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        if user_input is not None:
+            self._controller_data[CONF_CONTROLLERS] = _apply_di_descriptions(controllers, user_input)
+            return await self.async_step_options()
+        return self.async_show_form(step_id="di_descriptions", data_schema=_di_descriptions_schema(controllers))
 
     async def async_step_options(self, user_input: dict | None = None):
         if user_input is not None:
@@ -510,8 +567,15 @@ class FonrichOptionsFlow(config_entries.OptionsFlow):
         controllers = self._controller_data.get(CONF_CONTROLLERS, [])
         if user_input is not None:
             self._controller_data[CONF_CONTROLLERS] = _apply_channel_descriptions(controllers, user_input)
-            return await self.async_step_polling()
+            return await self.async_step_di_descriptions()
         return self.async_show_form(step_id="channel_descriptions", data_schema=_channel_descriptions_schema(controllers))
+
+    async def async_step_di_descriptions(self, user_input: dict | None = None):
+        controllers = self._controller_data.get(CONF_CONTROLLERS, [])
+        if user_input is not None:
+            self._controller_data[CONF_CONTROLLERS] = _apply_di_descriptions(controllers, user_input)
+            return await self.async_step_polling()
+        return self.async_show_form(step_id="di_descriptions", data_schema=_di_descriptions_schema(controllers))
 
     async def async_step_polling(self, user_input: dict | None = None):
         data = {**self._config_entry.data, **self._config_entry.options}

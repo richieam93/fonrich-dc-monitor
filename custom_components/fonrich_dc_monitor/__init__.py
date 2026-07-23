@@ -12,6 +12,8 @@ from .const import (
     CONF_PROTOCOL,
     CONF_CONTROLLERS,
     CONF_ENABLE_BUTTONS,
+    CONF_ENABLE_SAFETY_TEST_BUTTONS,
+    CONF_DI_DESCRIPTIONS,
     CONF_ENABLE_CHANNEL_VOLTAGE,
     CONF_ENABLE_DAILY_MAX_CURRENT,
     CONF_ENABLE_POWER,
@@ -33,6 +35,8 @@ from .const import (
     DEFAULT_TIMEOUT,
     DEFAULT_CHANNEL_COUNT,
     DEFAULT_ENABLE_BUTTONS,
+    DEFAULT_ENABLE_SAFETY_TEST_BUTTONS,
+    DEFAULT_DI_DESCRIPTIONS,
     DEFAULT_ENABLE_CHANNEL_VOLTAGE,
     DEFAULT_ENABLE_DAILY_MAX_CURRENT,
     SENSOR_PROFILE_PRODUCTION,
@@ -45,10 +49,13 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 
-CARD_URL = "/fonrich_dc_monitor/fonrich-cards.js"
-OLD_CARD_URLS = ["/fonrich_dc_monitor/fonrich-dc-monitor-cards.js"]
+CARD_URL = "/fonrich_dc_monitor/fonrich-dashboard.js"
+OLD_CARD_URLS = [
+    "/fonrich_dc_monitor/fonrich-cards.js",
+    "/fonrich_dc_monitor/fonrich-dc-monitor-cards.js",
+]
 CARD_STATIC_URL = "/fonrich_dc_monitor"
-CARD_FILE = "fonrich-cards.js"
+CARD_FILE = "fonrich-dashboard.js"
 
 SERVICE_REFRESH_NOW = "refresh_now"
 SERVICE_CLEAR_ALARM_TRIP = "clear_alarm_trip"
@@ -220,8 +227,8 @@ async def _async_register_frontend_when_ready(hass: HomeAssistant) -> None:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate older entries to the compact Kasten/Kanal entity model."""
-    if entry.version >= 2:
+    """Migrate older entries to the stable Kasten/Kanal and safety model."""
+    if entry.version >= 3:
         return True
 
     data = dict(entry.data)
@@ -231,27 +238,33 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         controller = dict(item)
         name = str(controller.get("name", ""))
         import re
+
         match = re.search(r"\bV\s*(\d+)\b", name, re.IGNORECASE)
         if match and ("kasten" in name.lower() or name.lower().startswith("v")):
             controller["name"] = f"Kasten V{match.group(1)}"
+        controller.setdefault(CONF_DI_DESCRIPTIONS, list(DEFAULT_DI_DESCRIPTIONS))
         controllers.append(controller)
     if controllers:
         data[CONF_CONTROLLERS] = controllers
 
-    options[CONF_SENSOR_PROFILE] = SENSOR_PROFILE_PRODUCTION
-    options[CONF_ENABLE_POWER] = True
-    options[CONF_ENABLE_ENERGY] = False
-    options[CONF_ENABLE_HISTORY] = False
-    options[CONF_ENABLE_ALARM_BINARY_SENSORS] = False
-    options[CONF_ENABLE_ALARM_MASKS] = False
-    options[CONF_ENABLE_ALARM_TEXT_SENSOR] = True
-    options[CONF_ENABLE_ARC_INTENSITY] = False
-    options[CONF_ENABLE_BUTTONS] = True
-    options.setdefault(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE)
-    options.setdefault(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT)
+    if entry.version < 2:
+        options[CONF_SENSOR_PROFILE] = SENSOR_PROFILE_PRODUCTION
+        options[CONF_ENABLE_POWER] = True
+        options[CONF_ENABLE_ENERGY] = False
+        options[CONF_ENABLE_HISTORY] = False
+        options[CONF_ENABLE_ALARM_BINARY_SENSORS] = False
+        options[CONF_ENABLE_ALARM_MASKS] = False
+        options[CONF_ENABLE_ALARM_TEXT_SENSOR] = True
+        options[CONF_ENABLE_ARC_INTENSITY] = False
+        options[CONF_ENABLE_BUTTONS] = True
+        options.setdefault(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE)
+        options.setdefault(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT)
 
-    hass.config_entries.async_update_entry(entry, data=data, options=options, version=2)
-    _LOGGER.info("Migrated Fonrich DC Monitor config entry to version 2")
+    # Safety-related physical test buttons are always opt-in after migration.
+    options.setdefault(CONF_ENABLE_SAFETY_TEST_BUTTONS, DEFAULT_ENABLE_SAFETY_TEST_BUTTONS)
+
+    hass.config_entries.async_update_entry(entry, data=data, options=options, version=3)
+    _LOGGER.info("Migrated Fonrich DC Monitor config entry to version 3")
     return True
 
 type FonrichConfigEntry = ConfigEntry[FonrichHub]
@@ -280,6 +293,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FonrichConfigEntry) -> b
                 enabled=bool(item.get("enabled", True)),
                 channel_count=int(item.get("channel_count", DEFAULT_CHANNEL_COUNT)),
                 channel_descriptions=tuple(item.get("channel_descriptions", [])),
+                di_descriptions=tuple(item.get(CONF_DI_DESCRIPTIONS, DEFAULT_DI_DESCRIPTIONS)),
             )
         )
 

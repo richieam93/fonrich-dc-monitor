@@ -45,6 +45,13 @@ async def async_setup_entry(
         FonrichOnlineBinarySensor(hub, controller) for controller in hub.controllers
     ]
 
+    if hub.include_alarm_registers():
+        entities.extend(
+            FonrichDigitalInputBinarySensor(hub, controller, index)
+            for controller in hub.controllers
+            for index in range(1, 5)
+        )
+
     if _binary_sensors_enabled(hub):
         for controller in hub.controllers:
             for description in BINARY_DESCRIPTIONS:
@@ -76,9 +83,42 @@ class FonrichOnlineBinarySensor(FonrichEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self):
         return {
-            "controller": self.controller.display_name,
-            "controller_slave": self.controller.slave,
+            **self.fonrich_attributes("controller_online"),
             "last_error": self.hub.last_error.get(self.controller_id),
+            "last_success": self.hub.last_success.get(self.controller_id),
+            "last_attempt": self.hub.last_attempt.get(self.controller_id),
+            "consecutive_errors": self.hub.consecutive_errors.get(self.controller_id, 0),
+            "successful_polls": self.hub.successful_polls.get(self.controller_id, 0),
+            "failed_polls": self.hub.failed_polls.get(self.controller_id, 0),
+            "category_errors": self.hub.category_errors.get(self.controller_id, {}),
+        }
+
+
+class FonrichDigitalInputBinarySensor(FonrichEntity, BinarySensorEntity):
+    """Expose the physical DI input bit without assuming normal/open polarity."""
+
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig, index: int) -> None:
+        super().__init__(hub, controller, f"di{index}_input")
+        self.index = index
+        description = controller.di_description(index)
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_di{index}_input"
+        self._attr_name = f"DI{index} {description}" if description.lower() != f"di{index}" else f"DI{index} Eingang"
+        self._attr_icon = "mdi:electric-switch"
+
+    @property
+    def is_on(self) -> bool | None:
+        raw = self.hub.get_raw_value(self.controller_id, "di_status_raw")
+        if raw is None:
+            return None
+        return bool(raw & (1 << (self.index - 1)))
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            **self.fonrich_attributes("digital_input"),
+            "di_index": self.index,
+            "di_description": self.controller.di_description(self.index),
+            "polarity_note": "Ein = Modbus-DI-Bit 1. Die elektrische Normal-/Alarm-Logik hängt von der Verdrahtung ab.",
         }
 
 
@@ -112,10 +152,12 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
-        if self.channel is None:
-            return {"controller_slave": self.controller.slave}
-        return {
-            "channel": self.channel,
-            "channel_description": self.controller.channel_description(self.channel),
-            "controller_slave": self.controller.slave,
-        }
+        data = self.fonrich_attributes("alarm_binary")
+        if self.channel is not None:
+            data.update(
+                {
+                    "channel": self.channel,
+                    "channel_description": self.controller.channel_description(self.channel),
+                }
+            )
+        return data

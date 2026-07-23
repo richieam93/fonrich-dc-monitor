@@ -5,6 +5,7 @@ from homeassistant.helpers.entity import DeviceInfo, Entity
 from .const import DOMAIN
 from .coordinator import ControllerConfig, FonrichHub
 
+
 class FonrichEntity(Entity):
     _attr_has_entity_name = True
 
@@ -33,3 +34,20 @@ class FonrichEntity(Entity):
     @property
     def available(self) -> bool:
         return self.hub.available.get(self.controller_id, False)
+
+    def fonrich_attributes(self, role: str | None = None) -> dict:
+        """Stable metadata used by the bundled Lovelace cards.
+
+        Cards should not depend on translated friendly names. These attributes
+        are deliberately language independent and remain stable across renames.
+        """
+        data = {
+            "fonrich_integration": True,
+            "fonrich_key": self.key,
+            "controller": self.controller.display_name,
+            "controller_id": self.controller.controller_id,
+            "controller_slave": self.controller.slave,
+        }
+        if role:
+            data["fonrich_role"] = role
+        return data

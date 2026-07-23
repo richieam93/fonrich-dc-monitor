@@ -1,0 +1,64 @@
+title: Fonrich Solar
+views:
+  - title: Übersicht
+    path: fonrich-uebersicht
+    icon: mdi:solar-power-variant
+    cards:
+      - type: custom:fonrich-modern-production-card
+        title: Fonrich Modern
+        controllers:
+          - V1 / Kasten 1
+          - V2 / Kasten 2
+          - V3 / Kasten 3
+        max_current: 15
+        channel_count: 8
+        show_buttons: true
+
+  - title: Solarzellen
+    path: solarzellen
+    icon: mdi:solar-panel-large
+    cards:
+      - type: custom:fonrich-solar-monitor-card
+        title: Solarzellen und Strings
+        controllers:
+          - V1 / Kasten 1
+          - V2 / Kasten 2
+          - V3 / Kasten 3
+        channel_count: 8
+        max_current: 15
+        show_inactive: true
+
+  - title: Energiefluss
+    path: energiefluss
+    icon: mdi:transmission-tower-export
+    cards:
+      - type: custom:fonrich-solar-flow-card
+        title: Solar Energiefluss
+        controllers:
+          - V1 / Kasten 1
+          - V2 / Kasten 2
+          - V3 / Kasten 3
+        channel_count: 8
+        show_panels: true
+        inverter_power_entity: sensor.inverter_gesamt_pv
+        house_power_entity: sensor.power_meter_active_power_1
+        grid_power_entity: sensor.energie_hv_p
+        battery_power_entity: sensor.battery_charge_discharge_power_2
+        battery_soc_entity: sensor.battery_state_of_capacity_2
+
+  - title: Alarm und Tests
+    path: fonrich-alarm
+    icon: mdi:shield-alert
+    cards:
+      - type: custom:fonrich-dashboard-alarm-card
+        title: Fonrich Schutz, Alarm und Tests
+        columns: 2
+        show_inputs: true
+
+  - title: Diagnose
+    path: fonrich-diagnose
+    icon: mdi:lan-check
+    cards:
+      - type: custom:fonrich-dashboard-diagnostics-card
+        title: Fonrich Busdiagnose
+        columns: 3
