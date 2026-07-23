@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import re
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfElectricCurrent, UnitOfElectricPotential, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -11,12 +17,16 @@ from .const import (
     CONF_ENABLE_ALARM_MASKS,
     CONF_ENABLE_ALARM_TEXT_SENSOR,
     CONF_ENABLE_ARC_INTENSITY,
+    CONF_ENABLE_CHANNEL_VOLTAGE,
+    CONF_ENABLE_DAILY_MAX_CURRENT,
     CONF_ENABLE_ENERGY,
     CONF_ENABLE_HISTORY,
     CONF_ENABLE_POWER,
     CONF_SENSOR_PROFILE,
     DEFAULT_ENABLE_ALARM_MASKS,
     DEFAULT_ENABLE_ALARM_TEXT_SENSOR,
+    DEFAULT_ENABLE_CHANNEL_VOLTAGE,
+    DEFAULT_ENABLE_DAILY_MAX_CURRENT,
     DEFAULT_ENABLE_ENERGY,
     DEFAULT_ENABLE_HISTORY,
     DEFAULT_ENABLE_POWER,
@@ -25,7 +35,7 @@ from .const import (
     SENSOR_PROFILE_PRODUCTION,
     SENSOR_PROFILE_STANDARD,
 )
-from .coordinator import FonrichHub
+from .coordinator import ControllerConfig, FonrichHub
 from .entity import FonrichEntity
 from .registers import ALL_SENSOR_REGISTERS, RegisterDescription
 
@@ -37,25 +47,32 @@ def _channel_from_key(key: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _is_enabled_for_controller(controller, key: str) -> bool:
+def _is_enabled_for_controller(controller: ControllerConfig, key: str) -> bool:
     channel = _channel_from_key(key)
     return channel is None or channel <= int(controller.channel_count)
+
+
+def _production_register(description: RegisterDescription) -> bool:
+    if description.key in {"voltage", "total_current", "total_power_direct"}:
+        return True
+    if re.fullmatch(r"ch\d+_current", description.key):
+        return True
+    if re.fullmatch(r"ch\d+_power_direct", description.key):
+        return True
+    return False
 
 
 def _sensor_enabled(hub: FonrichHub, description: RegisterDescription) -> bool:
     profile = str(hub.options.get(CONF_SENSOR_PROFILE, DEFAULT_SENSOR_PROFILE))
 
-    # Production profile is intentionally lean: controller voltage, total current,
-    # channel currents, channel powers and optional energy. No alarm/status clutter.
     if profile == SENSOR_PROFILE_PRODUCTION:
-        if description.category in {"alarm", "diagnostic", "history", "arc_intensity"}:
+        if not _production_register(description):
             return False
     elif profile == SENSOR_PROFILE_STANDARD:
         if description.category in {"diagnostic", "arc_intensity"}:
             return False
-    elif profile != SENSOR_PROFILE_DIAGNOSTIC:
-        if description.category in {"diagnostic", "arc_intensity"}:
-            return False
+    elif profile != SENSOR_PROFILE_DIAGNOSTIC and description.category in {"diagnostic", "arc_intensity"}:
+        return False
 
     if description.category == "power" and not hub.options.get(CONF_ENABLE_POWER, DEFAULT_ENABLE_POWER):
         return False
@@ -71,21 +88,21 @@ def _sensor_enabled(hub: FonrichHub, description: RegisterDescription) -> bool:
 
 
 ALARM_STATUS_1_BITS = [
-    (1, "Bus Lichtbogen"),
-    (2, "Kanal Lichtbogen"),
+    (1, "Bus-Lichtbogen"),
+    (2, "Kanal-Lichtbogen"),
     (4, "Unterspannung"),
     (8, "Überspannung"),
-    (16, "Temperatur 1 hoch"),
-    (32, "Temperatur 2 hoch"),
-    (64, "Kanal Rückstrom"),
-    (128, "Total Rückstrom hoch"),
-    (256, "Total Strom niedrig"),
-    (512, "Total Strom hoch"),
-    (1024, "Kanal Kein Strom"),
-    (2048, "Kanal Unterstrom"),
-    (4096, "Kanal Überstrom"),
-    (8192, "Kanal Strom zu niedrig"),
-    (16384, "Kanal Strom zu hoch"),
+    (16, "Temperatur 1 zu hoch"),
+    (32, "Temperatur 2 zu hoch"),
+    (64, "Kanal-Rückstrom"),
+    (128, "Gesamt-Rückstrom zu hoch"),
+    (256, "Gesamtstrom zu niedrig"),
+    (512, "Gesamtstrom zu hoch"),
+    (1024, "Kanal ohne Strom"),
+    (2048, "Kanal-Unterstrom"),
+    (4096, "Kanal-Überstrom"),
+    (8192, "Kanalstrom zu niedrig"),
+    (16384, "Kanalstrom zu hoch"),
 ]
 
 CHANNEL_MASKS = [
@@ -96,7 +113,7 @@ CHANNEL_MASKS = [
     ("overcurrent_alarm_mask", "Überstrom"),
     ("current_low_alarm_mask", "Strom zu niedrig"),
     ("current_high_alarm_mask", "Strom zu hoch"),
-    ("arc_selfcheck_fail_mask", "Lichtbogen Selbsttest Fehler"),
+    ("arc_selfcheck_fail_mask", "Lichtbogen-Selbsttestfehler"),
 ]
 
 
@@ -104,17 +121,25 @@ def _alarm_text_enabled(hub: FonrichHub) -> bool:
     return bool(hub.options.get(CONF_ENABLE_ALARM_TEXT_SENSOR, DEFAULT_ENABLE_ALARM_TEXT_SENSOR))
 
 
-def _short_controller_name(name: str) -> str:
-    return str(name).split("/")[0].strip() or str(name)
+def _channel_name(controller: ControllerConfig, channel: int) -> str:
+    description = controller.channel_description(channel).strip()
+    base = f"Kanal {channel:02d}"
+    if description and description.lower() not in {f"kanal {channel}", f"kanal {channel:02d}"}:
+        return f"{base} ({description})"
+    return base
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     hub: FonrichHub = entry.runtime_data
-    entities = []
+    entities: list[SensorEntity] = []
+
     if _alarm_text_enabled(hub):
         entities.append(FonrichGatewayAlarmTextSensor(hub))
-        for controller in hub.controllers:
-            entities.append(FonrichControllerAlarmTextSensor(hub, controller))
+        entities.extend(FonrichControllerAlarmTextSensor(hub, controller) for controller in hub.controllers)
 
     for controller in hub.controllers:
         for description in ALL_SENSOR_REGISTERS:
@@ -123,13 +148,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             if not _sensor_enabled(hub, description):
                 continue
             entities.append(FonrichSensor(hub, controller, description))
+
+        if hub.options.get(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE):
+            entities.extend(
+                FonrichChannelVoltageSensor(hub, controller, channel)
+                for channel in range(1, controller.channel_count + 1)
+            )
+
+        if hub.options.get(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT):
+            entities.extend(
+                FonrichDailyMaxCurrentSensor(hub, controller, channel)
+                for channel in range(1, controller.channel_count + 1)
+            )
+
     async_add_entities(entities)
 
 
 class FonrichSensor(FonrichEntity, SensorEntity):
-    def __init__(self, hub: FonrichHub, controller, description: RegisterDescription) -> None:
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig, description: RegisterDescription) -> None:
         super().__init__(hub, controller, description.key)
         self.description = description
+        self.channel = _channel_from_key(description.key)
         self.entity_description = SensorEntityDescription(
             key=description.key,
             device_class=description.device_class,
@@ -137,23 +176,29 @@ class FonrichSensor(FonrichEntity, SensorEntity):
             native_unit_of_measurement=description.unit,
             suggested_display_precision=description.precision,
         )
-        self.channel = _channel_from_key(description.key)
         self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_{description.key}"
-        self._attr_translation_key = description.key
-        self._attr_name = self._name_with_channel_description(description.name)
+        self._attr_name = self._friendly_name(description)
         self._attr_native_unit_of_measurement = description.unit
         self._attr_device_class = description.device_class
         self._attr_state_class = description.state_class
         self._attr_suggested_display_precision = description.precision
 
-    def _name_with_channel_description(self, name: str) -> str:
-        if self.channel is None:
-            return name
-        suffix = re.sub(rf"^Kanal\s+{self.channel}\s*", "", name).strip()
-        channel_description = self.controller.channel_description(self.channel).strip()
-        if channel_description and channel_description.lower() != f"kanal {self.channel}".lower():
-            return f"Kanal {self.channel:02d} - {channel_description} {suffix}".strip()
-        return f"Kanal {self.channel:02d} {suffix}".strip()
+    def _friendly_name(self, description: RegisterDescription) -> str:
+        if description.key == "voltage":
+            return "Spannung"
+        if description.key == "total_current":
+            return "Gesamtstrom"
+        if description.key == "total_power_direct":
+            return "Gesamtleistung"
+        if self.channel is not None:
+            prefix = _channel_name(self.controller, self.channel)
+            if description.key.endswith("_current"):
+                return f"{prefix} Ampere"
+            if description.key.endswith("_power_direct"):
+                return f"{prefix} Leistung"
+            suffix = re.sub(rf"^Kanal\s+{self.channel}\s*", "", description.name).strip()
+            return f"{prefix} {suffix}".strip()
+        return description.name
 
     @property
     def native_value(self):
@@ -162,7 +207,7 @@ class FonrichSensor(FonrichEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         if self.channel is None:
-            return None
+            return {"controller_slave": self.controller.slave}
         return {
             "channel": self.channel,
             "channel_description": self.controller.channel_description(self.channel),
@@ -170,59 +215,127 @@ class FonrichSensor(FonrichEntity, SensorEntity):
         }
 
 
-class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
-    """Single compact alarm text sensor per controller."""
+class FonrichChannelVoltageSensor(FonrichEntity, SensorEntity):
+    """Expose the controller bus voltage under every channel for a clear UI layout."""
 
-    def __init__(self, hub: FonrichHub, controller) -> None:
-        super().__init__(hub, controller, "alarm_text")
-        self.entity_description = SensorEntityDescription(key="alarm_text")
-        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_alarm_text"
-        self._attr_name = "Alarmmeldung"
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig, channel: int) -> None:
+        super().__init__(hub, controller, f"ch{channel}_voltage")
+        self.channel = channel
+        self.entity_description = SensorEntityDescription(
+            key=f"ch{channel}_voltage",
+            device_class=SensorDeviceClass.VOLTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+            suggested_display_precision=0,
+        )
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_ch{channel}_voltage"
+        self._attr_name = f"{_channel_name(controller, channel)} Spannung"
 
     @property
     def native_value(self):
-        messages = self._alarm_messages()
-        if not messages:
-            return "OK"
-        text = "; ".join(messages[:4])
-        if len(messages) > 4:
-            text += f"; +{len(messages) - 4} weitere"
-        return text[:255]
+        return self.hub.get_value(self.controller_id, "voltage")
 
-    def _alarm_messages(self) -> list[str]:
-        prefix = _short_controller_name(self.controller.name)
+    @property
+    def extra_state_attributes(self):
+        return {
+            "channel": self.channel,
+            "channel_description": self.controller.channel_description(self.channel),
+            "controller_slave": self.controller.slave,
+            "source": "controller_bus_voltage",
+            "note": "Der Fonrich liefert eine gemeinsame Busspannung pro Kasten; dieser Wert wird dem Kanal zugeordnet.",
+        }
+
+
+class FonrichDailyMaxCurrentSensor(FonrichEntity, SensorEntity):
+    """Highest measured channel current since local midnight."""
+
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig, channel: int) -> None:
+        super().__init__(hub, controller, f"ch{channel}_daily_max_current")
+        self.channel = channel
+        self.entity_description = SensorEntityDescription(
+            key=f"ch{channel}_daily_max_current",
+            device_class=SensorDeviceClass.CURRENT,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+            suggested_display_precision=3,
+        )
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_ch{channel}_daily_max_current"
+        self._attr_name = f"{_channel_name(controller, channel)} Max. Ampere heute"
+
+    @property
+    def available(self) -> bool:
+        return self.hub.get_daily_max_current(self.controller_id, self.channel) is not None
+
+    @property
+    def native_value(self):
+        return self.hub.get_daily_max_current(self.controller_id, self.channel)
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "channel": self.channel,
+            "channel_description": self.controller.channel_description(self.channel),
+            "controller_slave": self.controller.slave,
+            "period": "today",
+        }
+
+
+class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
+    """One readable message sensor per controller."""
+
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig) -> None:
+        super().__init__(hub, controller, "alarm_text")
+        self.entity_description = SensorEntityDescription(key="alarm_text")
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_alarm_text"
+        self._attr_name = "Meldungen"
+        self._attr_icon = "mdi:message-alert-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self):
+        messages = self.alarm_messages()
+        if not self.hub.available.get(self.controller_id, False):
+            return f"{self.controller.display_name} offline"
+        return "OK" if not messages else "; ".join(messages)[:255]
+
+    def alarm_messages(self) -> list[str]:
         messages: list[str] = []
+        controller_name = self.controller.display_name
 
-        # Channel-specific masks first, so the state is useful, e.g. "V1 Kanal 06 Lichtbogen".
         for key, label in CHANNEL_MASKS:
             raw = self.hub.get_raw_value(self.controller_id, key) or 0
             for channel in range(1, min(int(self.controller.channel_count), 16) + 1):
                 if raw & (1 << (channel - 1)):
-                    desc = self.controller.channel_description(channel).strip()
-                    channel_text = f"Kanal {channel:02d}"
-                    if desc and desc.lower() != f"kanal {channel}".lower():
-                        channel_text += f" - {desc}"
-                    messages.append(f"{prefix} {channel_text} {label}")
+                    text = f"{label} bei {controller_name}, Kanal {channel:02d}"
+                    description = self.controller.channel_description(channel).strip()
+                    if description and description.lower() not in {f"kanal {channel}", f"kanal {channel:02d}"}:
+                        text += f" ({description})"
+                    messages.append(text)
 
         alarm_1 = self.hub.get_raw_value(self.controller_id, "alarm_status_1") or 0
+        exact_labels = {message.split(" bei ", 1)[0] for message in messages}
         for bit, label in ALARM_STATUS_1_BITS:
-            if alarm_1 & bit:
-                # If a channel-light-arc mask already gives exact channel info, skip the generic summary.
-                if bit == 2 and any("Lichtbogen" in msg for msg in messages):
+            if not alarm_1 & bit:
+                continue
+            if label == "Kanal-Lichtbogen" and "Lichtbogen" in exact_labels:
+                continue
+            if label in {"Kanal-Rückstrom", "Kanal ohne Strom", "Kanal-Unterstrom", "Kanal-Überstrom", "Kanalstrom zu niedrig", "Kanalstrom zu hoch"}:
+                normalized = label.replace("Kanal-", "").replace("Kanal", "").strip()
+                if any(normalized.lower() in item.lower() for item in messages):
                     continue
-                messages.append(f"{prefix} {label}")
+            messages.append(f"{label} bei {controller_name}")
 
         alarm_2 = self.hub.get_raw_value(self.controller_id, "alarm_status_2") or 0
         if alarm_2:
-            messages.append(f"{prefix} Alarm Status 2: {alarm_2}")
+            messages.append(f"Weitere Alarmmeldung bei {controller_name} (Code {alarm_2})")
 
-        trip_1 = self.hub.get_raw_value(self.controller_id, "trip_status_1") or 0
-        trip_2 = self.hub.get_raw_value(self.controller_id, "trip_status_2") or 0
-        trip_3 = self.hub.get_raw_value(self.controller_id, "trip_status_3") or 0
-        if trip_1 or trip_2 or trip_3:
-            messages.append(f"{prefix} Trip aktiv")
+        trip_values = [self.hub.get_raw_value(self.controller_id, f"trip_status_{index}") or 0 for index in range(1, 4)]
+        if any(trip_values):
+            messages.append(f"Trip aktiv bei {controller_name}")
 
-        # Preserve order but remove duplicates.
         result: list[str] = []
         for message in messages:
             if message not in result:
@@ -231,21 +344,19 @@ class FonrichControllerAlarmTextSensor(FonrichEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        messages = self._alarm_messages()
+        messages = self.alarm_messages()
         return {
-            "controller": self.controller.name,
+            "controller": self.controller.display_name,
             "controller_slave": self.controller.slave,
-            "active_alarm_count": len(messages),
-            "active_alarms": messages,
-            "alarm_status_1": self.hub.get_raw_value(self.controller_id, "alarm_status_1"),
-            "alarm_status_2": self.hub.get_raw_value(self.controller_id, "alarm_status_2"),
-            "trip_status_1": self.hub.get_raw_value(self.controller_id, "trip_status_1"),
-            "arc_alarm_mask": self.hub.get_raw_value(self.controller_id, "arc_alarm_ch_1_8"),
+            "online": self.hub.available.get(self.controller_id, False),
+            "active_message_count": len(messages),
+            "active_messages": messages,
+            "last_error": self.hub.last_error.get(self.controller_id),
         }
 
 
 class FonrichGatewayAlarmTextSensor(SensorEntity):
-    """Single compact alarm text sensor for the whole gateway."""
+    """Single combined message sensor for every controller on the gateway."""
 
     _attr_has_entity_name = False
 
@@ -254,7 +365,8 @@ class FonrichGatewayAlarmTextSensor(SensorEntity):
         self.entity_description = SensorEntityDescription(key="gateway_alarm_text")
         self._remove_callback = None
         self._attr_unique_id = f"{hub.gateway_uid}_gateway_alarm_text"
-        self._attr_name = "Fonrich Alarmmeldung"
+        self._attr_name = "Fonrich Meldungen"
+        self._attr_icon = "mdi:message-alert"
 
     async def async_added_to_hass(self) -> None:
         self._remove_callback = self.hub.callbacks.add(self.async_write_ha_state)
@@ -266,23 +378,20 @@ class FonrichGatewayAlarmTextSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        return any(self.hub.available.values())
+        return True
 
     @property
     def native_value(self):
-        messages = self._all_messages()
-        if not messages:
-            return "OK"
-        text = "; ".join(messages[:4])
-        if len(messages) > 4:
-            text += f"; +{len(messages) - 4} weitere"
-        return text[:255]
+        messages = self.all_messages()
+        return "OK" if not messages else "; ".join(messages)[:255]
 
-    def _all_messages(self) -> list[str]:
+    def all_messages(self) -> list[str]:
         messages: list[str] = []
         for controller in self.hub.controllers:
-            sensor = FonrichControllerAlarmTextSensor(self.hub, controller)
-            messages.extend(sensor._alarm_messages())
+            if not self.hub.available.get(controller.controller_id, False):
+                messages.append(f"{controller.display_name} offline")
+                continue
+            messages.extend(FonrichControllerAlarmTextSensor(self.hub, controller).alarm_messages())
         result: list[str] = []
         for message in messages:
             if message not in result:
@@ -291,10 +400,18 @@ class FonrichGatewayAlarmTextSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        messages = self._all_messages()
-        offline = [c.name for c in self.hub.controllers if not self.hub.available.get(c.controller_id, False)]
+        messages = self.all_messages()
         return {
-            "active_alarm_count": len(messages),
-            "active_alarms": messages,
-            "offline_controllers": offline,
+            "active_message_count": len(messages),
+            "active_messages": messages,
+            "online_controllers": [
+                controller.display_name
+                for controller in self.hub.controllers
+                if self.hub.available.get(controller.controller_id, False)
+            ],
+            "offline_controllers": [
+                controller.display_name
+                for controller in self.hub.controllers
+                if not self.hub.available.get(controller.controller_id, False)
+            ],
         }

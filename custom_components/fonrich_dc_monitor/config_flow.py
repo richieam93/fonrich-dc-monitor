@@ -64,8 +64,12 @@ from .const import (
     DEFAULT_ENABLE_ALARM_MASKS,
     CONF_ENABLE_ALARM_BINARY_SENSORS,
     CONF_ENABLE_ALARM_TEXT_SENSOR,
+    CONF_ENABLE_DAILY_MAX_CURRENT,
+    CONF_ENABLE_CHANNEL_VOLTAGE,
     DEFAULT_ENABLE_ALARM_BINARY_SENSORS,
     DEFAULT_ENABLE_ALARM_TEXT_SENSOR,
+    DEFAULT_ENABLE_DAILY_MAX_CURRENT,
+    DEFAULT_ENABLE_CHANNEL_VOLTAGE,
     CONF_SENSOR_PROFILE,
     DEFAULT_SENSOR_PROFILE,
     SENSOR_PROFILE_OPTIONS,
@@ -113,7 +117,7 @@ def _controller_list_from_text(slaves_text: str, names_text: str = "", existing:
     controllers: list[dict] = []
     for idx, slave in enumerate(slaves, start=1):
         old = old_by_slave.get(slave, {})
-        default_name = f"V{idx} / Kasten {idx}"
+        default_name = f"Kasten V{idx}"
         name = names[idx - 1] if idx <= len(names) else old.get("name", default_name)
         count = int(old.get("channel_count", DEFAULT_CHANNEL_COUNT))
         descriptions = list(old.get("channel_descriptions", []))
@@ -270,12 +274,16 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
     enable_alarm_binary = defaults.get(CONF_ENABLE_ALARM_BINARY_SENSORS, DEFAULT_ENABLE_ALARM_BINARY_SENSORS)
     enable_alarm_text = defaults.get(CONF_ENABLE_ALARM_TEXT_SENSOR, DEFAULT_ENABLE_ALARM_TEXT_SENSOR)
     enable_buttons = defaults.get(CONF_ENABLE_BUTTONS, DEFAULT_ENABLE_BUTTONS)
+    enable_daily_max = defaults.get(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT)
+    enable_channel_voltage = defaults.get(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE)
     enable_arc = defaults.get(CONF_ENABLE_ARC_INTENSITY, False)
 
     return vol.Schema(
         {
             vol.Required(CONF_SENSOR_PROFILE, default=profile): vol.In(SENSOR_PROFILE_OPTIONS),
             vol.Required(CONF_SCAN_BASE, default=defaults.get(CONF_SCAN_BASE, DEFAULT_SCAN_BASE)): vol.All(int, vol.Range(min=5, max=3600)),
+            vol.Required(CONF_ENABLE_CHANNEL_VOLTAGE, default=enable_channel_voltage): bool,
+            vol.Required(CONF_ENABLE_DAILY_MAX_CURRENT, default=enable_daily_max): bool,
             vol.Required(CONF_ENABLE_POWER, default=enable_power): bool,
             vol.Required(CONF_SCAN_POWER, default=defaults.get(CONF_SCAN_POWER, DEFAULT_SCAN_POWER)): vol.All(int, vol.Range(min=10, max=7200)),
             vol.Required(CONF_ENABLE_ENERGY, default=enable_energy): bool,
@@ -298,7 +306,7 @@ def _options_schema(defaults: dict | None = None) -> vol.Schema:
 
 
 class FonrichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._connection_data: dict = {}

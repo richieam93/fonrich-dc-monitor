@@ -25,7 +25,7 @@
       },
       "options": {
         "title": "Abfrage und Funktionen",
-        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden. Eine kompakte Alarmmeldung kann als einzelner Textsensor aktiv bleiben.",
+        "description": "Standardansicht: Status Online, eine gemeinsame Meldung, Buttons, Gesamtwerte sowie pro Kanal Ampere, Spannung, Leistung und maximale Ampere heute. Erweiterte Diagnosewerte bleiben optional.",
         "data": {
           "scan_alarm": "Alarm/Status Intervall (Sekunden)",
           "scan_base": "Spannung/Ampere Intervall (Sekunden)",
@@ -45,7 +45,9 @@
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
           "sensor_profile": "Sensor-Profil",
           "enable_alarm_text_sensor": "Eine kompakte Alarmmeldung als Textsensor erstellen",
-          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
+          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen",
+          "enable_channel_voltage": "Spannung bei jedem Kanal anzeigen",
+          "enable_daily_max_current": "Maximale Ampere pro Kanal für heute anzeigen"
         }
       },
       "channel_counts": {
@@ -117,9 +119,11 @@
           "max_registers_per_request": "Maximale Register pro Modbus-Abfrage",
           "sensor_profile": "Sensor-Profil",
           "enable_alarm_text_sensor": "Eine kompakte Alarmmeldung als Textsensor erstellen",
-          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen"
+          "enable_alarm_binary_sensors": "Alarm-Binary-Sensoren erstellen",
+          "enable_channel_voltage": "Spannung bei jedem Kanal anzeigen",
+          "enable_daily_max_current": "Maximale Ampere pro Kanal für heute anzeigen"
         },
-        "description": "Produktionsprofil erzeugt nur die wichtigen Werte: Volt, Ampere, Watt und optional Energie. Erweiterte Alarm-/Diagnosewerte können bei Bedarf aktiviert werden. Eine kompakte Alarmmeldung kann als einzelner Textsensor aktiv bleiben."
+        "description": "Standardansicht: Status Online, eine gemeinsame Meldung, Buttons, Gesamtwerte sowie pro Kanal Ampere, Spannung, Leistung und maximale Ampere heute. Erweiterte Diagnosewerte bleiben optional."
       },
       "channel_counts": {
         "title": "Kanalanzahl pro Controller",

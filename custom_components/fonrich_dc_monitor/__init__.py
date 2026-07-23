@@ -11,6 +11,17 @@ from .const import (
     CONF_BAUDRATE,
     CONF_PROTOCOL,
     CONF_CONTROLLERS,
+    CONF_ENABLE_BUTTONS,
+    CONF_ENABLE_CHANNEL_VOLTAGE,
+    CONF_ENABLE_DAILY_MAX_CURRENT,
+    CONF_ENABLE_POWER,
+    CONF_ENABLE_ENERGY,
+    CONF_ENABLE_HISTORY,
+    CONF_ENABLE_ALARM_BINARY_SENSORS,
+    CONF_ENABLE_ALARM_MASKS,
+    CONF_ENABLE_ALARM_TEXT_SENSOR,
+    CONF_ENABLE_ARC_INTENSITY,
+    CONF_SENSOR_PROFILE,
     CONF_HOST,
     CONF_PORT,
     CONF_RETRIES,
@@ -21,6 +32,10 @@ from .const import (
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
     DEFAULT_CHANNEL_COUNT,
+    DEFAULT_ENABLE_BUTTONS,
+    DEFAULT_ENABLE_CHANNEL_VOLTAGE,
+    DEFAULT_ENABLE_DAILY_MAX_CURRENT,
+    SENSOR_PROFILE_PRODUCTION,
     DOMAIN,
 )
 from .coordinator import ControllerConfig, FonrichHub
@@ -79,7 +94,7 @@ async def _async_register_frontend(hass: HomeAssistant, retry: int = 0) -> None:
             from homeassistant.components.http import StaticPathConfig
             try:
                 await hass.http.async_register_static_paths([
-                    StaticPathConfig(CARD_STATIC_URL, str(www_path), True)
+                    StaticPathConfig(CARD_STATIC_URL, str(www_path), False)
                 ])
                 _LOGGER.debug("Registered Fonrich static card path: %s -> %s", CARD_STATIC_URL, www_path)
             except RuntimeError:
@@ -88,7 +103,7 @@ async def _async_register_frontend(hass: HomeAssistant, retry: int = 0) -> None:
                 _LOGGER.warning("Could not register Fonrich static card path %s: %s", CARD_STATIC_URL, err)
         elif www_path.exists():
             try:
-                hass.http.register_static_path(CARD_STATIC_URL, str(www_path), True)
+                hass.http.register_static_path(CARD_STATIC_URL, str(www_path), False)
                 _LOGGER.debug("Registered Fonrich static card path: %s -> %s", CARD_STATIC_URL, www_path)
             except RuntimeError:
                 _LOGGER.debug("Fonrich static card path already registered: %s", CARD_STATIC_URL)
@@ -201,6 +216,43 @@ async def _async_register_frontend_when_ready(hass: HomeAssistant) -> None:
         await _setup_frontend()
     else:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _setup_frontend)
+
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate older entries to the compact Kasten/Kanal entity model."""
+    if entry.version >= 2:
+        return True
+
+    data = dict(entry.data)
+    options = dict(entry.options)
+    controllers = []
+    for item in data.get(CONF_CONTROLLERS, []):
+        controller = dict(item)
+        name = str(controller.get("name", ""))
+        import re
+        match = re.search(r"\bV\s*(\d+)\b", name, re.IGNORECASE)
+        if match and ("kasten" in name.lower() or name.lower().startswith("v")):
+            controller["name"] = f"Kasten V{match.group(1)}"
+        controllers.append(controller)
+    if controllers:
+        data[CONF_CONTROLLERS] = controllers
+
+    options[CONF_SENSOR_PROFILE] = SENSOR_PROFILE_PRODUCTION
+    options[CONF_ENABLE_POWER] = True
+    options[CONF_ENABLE_ENERGY] = False
+    options[CONF_ENABLE_HISTORY] = False
+    options[CONF_ENABLE_ALARM_BINARY_SENSORS] = False
+    options[CONF_ENABLE_ALARM_MASKS] = False
+    options[CONF_ENABLE_ALARM_TEXT_SENSOR] = True
+    options[CONF_ENABLE_ARC_INTENSITY] = False
+    options[CONF_ENABLE_BUTTONS] = True
+    options.setdefault(CONF_ENABLE_CHANNEL_VOLTAGE, DEFAULT_ENABLE_CHANNEL_VOLTAGE)
+    options.setdefault(CONF_ENABLE_DAILY_MAX_CURRENT, DEFAULT_ENABLE_DAILY_MAX_CURRENT)
+
+    hass.config_entries.async_update_entry(entry, data=data, options=options, version=2)
+    _LOGGER.info("Migrated Fonrich DC Monitor config entry to version 2")
+    return True
 
 type FonrichConfigEntry = ConfigEntry[FonrichHub]
 

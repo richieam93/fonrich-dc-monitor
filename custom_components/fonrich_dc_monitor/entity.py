@@ -16,7 +16,7 @@ class FonrichEntity(Entity):
         self._remove_callback = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{hub.gateway_uid}_{controller.controller_id}")},
-            name=controller.name,
+            name=controller.display_name,
             manufacturer="Fonrich",
             model="FR-DCMG-MMPS",
             configuration_url=f"http://{hub.client.host}",

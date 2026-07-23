@@ -145,7 +145,7 @@ for ch in range(1, 17):
     ])
 
 BUTTONS: Final[list[ButtonDescription]] = [
-    ButtonDescription("clear_alarm_trip_status", "Alarm/Trip Status loeschen", 3074),
-    ButtonDescription("clear_arc_history", "Lichtbogen Historie loeschen", 3073),
-    ButtonDescription("arc_selftest", "Lichtbogen Selbsttest", 3077),
+    ButtonDescription("clear_alarm_trip_status", "Alarm und Trip zurücksetzen", 3074),
+    ButtonDescription("clear_arc_history", "Lichtbogen-Historie löschen", 3073),
+    ButtonDescription("arc_selftest", "Lichtbogen-Selbsttest starten", 3077),
 ]

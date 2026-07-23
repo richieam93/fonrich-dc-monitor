@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -15,7 +15,7 @@ from .const import (
     SENSOR_PROFILE_DIAGNOSTIC,
     SENSOR_PROFILE_STANDARD,
 )
-from .coordinator import FonrichHub
+from .coordinator import ControllerConfig, FonrichHub
 from .entity import FonrichEntity
 from .registers import BINARY_DESCRIPTIONS, BinaryDescription
 
@@ -35,22 +35,55 @@ def _binary_sensors_enabled(hub: FonrichHub) -> bool:
     )
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     hub: FonrichHub = entry.runtime_data
-    if not _binary_sensors_enabled(hub):
-        return
-    entities = []
-    for controller in hub.controllers:
-        for description in BINARY_DESCRIPTIONS:
-            channel = _channel_from_key(description.key)
-            if channel is not None and channel > int(controller.channel_count):
-                continue
-            entities.append(FonrichBinarySensor(hub, controller, description))
+    entities: list[BinarySensorEntity] = [
+        FonrichOnlineBinarySensor(hub, controller) for controller in hub.controllers
+    ]
+
+    if _binary_sensors_enabled(hub):
+        for controller in hub.controllers:
+            for description in BINARY_DESCRIPTIONS:
+                channel = _channel_from_key(description.key)
+                if channel is not None and channel > int(controller.channel_count):
+                    continue
+                entities.append(FonrichBinarySensor(hub, controller, description))
+
     async_add_entities(entities)
 
 
+class FonrichOnlineBinarySensor(FonrichEntity, BinarySensorEntity):
+    """Connectivity state for one controller."""
+
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig) -> None:
+        super().__init__(hub, controller, "online")
+        self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_online"
+        self._attr_name = "Status Online"
+        self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.hub.available.get(self.controller_id, False))
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "controller": self.controller.display_name,
+            "controller_slave": self.controller.slave,
+            "last_error": self.hub.last_error.get(self.controller_id),
+        }
+
+
 class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
-    def __init__(self, hub: FonrichHub, controller, description: BinaryDescription) -> None:
+    def __init__(self, hub: FonrichHub, controller: ControllerConfig, description: BinaryDescription) -> None:
         super().__init__(hub, controller, description.key)
         self.description = description
         self.channel = _channel_from_key(description.key)
@@ -63,8 +96,11 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
             return name
         suffix = re.sub(rf"^Kanal\s+{self.channel}\s*", "", name).strip()
         channel_description = self.controller.channel_description(self.channel).strip()
-        if channel_description and channel_description.lower() != f"kanal {self.channel}".lower():
-            return f"Kanal {self.channel:02d} - {channel_description} {suffix}".strip()
+        if channel_description and channel_description.lower() not in {
+            f"kanal {self.channel}",
+            f"kanal {self.channel:02d}",
+        }:
+            return f"Kanal {self.channel:02d} ({channel_description}) {suffix}".strip()
         return f"Kanal {self.channel:02d} {suffix}".strip()
 
     @property
@@ -77,7 +113,7 @@ class FonrichBinarySensor(FonrichEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self):
         if self.channel is None:
-            return None
+            return {"controller_slave": self.controller.slave}
         return {
             "channel": self.channel,
             "channel_description": self.controller.channel_description(self.channel),

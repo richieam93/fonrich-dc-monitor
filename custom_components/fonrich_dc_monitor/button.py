@@ -27,5 +27,12 @@ class FonrichButton(FonrichEntity, ButtonEntity):
         self._attr_unique_id = f"{hub.gateway_uid}_{controller.controller_id}_{description.key}"
         self._attr_name = description.name
 
+    @property
+    def extra_state_attributes(self):
+        return {
+            "controller": self.controller.display_name,
+            "controller_slave": self.controller.slave,
+        }
+
     async def async_press(self) -> None:
         await self.hub.write_register(self.controller, self.description.address, self.description.value)

@@ -1,195 +1,88 @@
-# Fonrich DC Monitor
+# Fonrich DC Monitor für Home Assistant
 
-Version: `0.6.7`
+Custom Integration für Fonrich FR-DCMG-MMPS über HF2211 (Modbus TCP Gateway oder RTU over TCP).
 
-Custom Integration für Home Assistant / HACS für Fonrich FR-DCMG-MMPS DC-Monitoring über einen HF2211. Unterstützt **HF2211 Protocol = Modbus** als Modbus-TCP-Gateway und optional **Protocol = NONE/Transparent** als RTU-over-TCP.
+## Version 0.7.0 – Kasten- und Kanalansicht
 
+Diese Version erzeugt standardmässig eine übersichtliche Struktur pro Fonrich-Controller:
 
-## Neu in v0.6.7
+### Kasten V1 / V2 / V3 / weitere Controller
 
-- Neue kompakte Alarmmeldung als Textsensor.
-- Standard bleibt schlank: Produktion mit Volt, Ampere, Watt und optional Energie.
-- Es werden nicht mehr viele einzelne Alarm-Entities benötigt.
-- Pro Controller gibt es eine Alarmmeldung und zusätzlich eine Gateway-Gesamtmeldung.
-- Beispielzustände: `OK`, `V1 Kanal 06 Lichtbogen`, `V2 Überspannung`, `V3 Trip aktiv`.
+- **Status Online**
+- **Meldungen** – ein einziger lesbarer Textsensor pro Kasten
+- **Spannung** in V
+- **Gesamtstrom** in A
+- **Gesamtleistung** in W
+- Buttons:
+  - Alarm und Trip zurücksetzen
+  - Lichtbogen-Historie löschen
+  - Lichtbogen-Selbsttest starten
 
-## Neu in v0.6.6
+### Pro Kanal
 
-- Fix: Lovelace cards can now be loaded more than once without CustomElementRegistry constructor errors.
-- Fix: Compatibility card alias uses a safe wrapper class.
+- **Kanal XX Ampere** in A
+- **Kanal XX Spannung** in V
+- **Kanal XX Leistung** in W
+- **Kanal XX Max. Ampere heute** in A
 
-## Neu in v0.6.5
+Die Tagesmaxima werden gespeichert und um Mitternacht nach der lokalen Home-Assistant-Zeitzone zurückgesetzt.
 
-- Neues **Sensor-Profil** in Einrichtung und Optionen:
-  - `production`: nur die wichtigen Produktionswerte
-  - `standard`: Produktionswerte plus einfache Alarmwerte
-  - `diagnostic`: alle Diagnose-/Alarm-/Historie-/Arc-Werte bei Bedarf
-- Standard ist jetzt bewusst schlank: **Volt, Ampere, Watt und optional Energie**.
-- Alarm-Binary-Sensoren, Alarmmasken, Historie, Arc-Intensität und Buttons sind standardmässig aus.
-- Einheitlichere Kanalnamen:
-  - `Kanal 01 - Dach Ost String 1 Strom`
-  - `Kanal 01 - Dach Ost String 1 Leistung`
-- Dashboard-Karten wurden auf Produktion angepasst und um eine moderne Karte erweitert:
-  - `Fonrich Modern`
-  - `Fonrich Produktion`
-  - `Fonrich Controller Produktion`
-  - `Fonrich String-Leistung`
-  - `Fonrich Energie`
-  - `Fonrich Alarme` optional
+> Der Fonrich liefert eine gemeinsame Busspannung pro Kasten und keine separate Spannung je String. Deshalb zeigt der Kanal-Spannungssensor die Busspannung des zugehörigen Kastens an.
 
-## Funktionen
+## Gemeinsamer Meldungssensor
 
-- UI-Konfiguration über Geräte & Dienste
-- Online-Prüfung beim Hinzufügen: Gateway per TCP und Controller per Modbus Register 260
-- HF2211 Protocol/UART-Modus einstellbar: `Modbus TCP Gateway` oder `RTU over TCP / Transparent`
-- Bus-Baudrate als Option einstellbar, z. B. 9600 oder 19200
-- Beliebig viele Controller pro Gateway als eigene Home-Assistant-Geräte
-- Pro Controller 1 bis 24 Kanäle als Zahlenfeld
-- Kanalbeschreibungen pro Kanal, z. B. `Dach Ost String 1`
-- Produktionssensoren für Spannung, Kanalstrom, Kanalleistung, Totalstrom, Totalleistung und optional Energie
-- Erweiterte Diagnose-/Alarmwerte optional zuschaltbar
-- Gestaffelte Abfrage über Kategorien, damit der RS485-Bus nicht auf einmal belastet wird
-- Mehrere HF2211-Gateways möglich: Integration pro Gateway zusätzlich hinzufügen
-- Lovelace-Karten als `www/*.js` für den Dashboard Visual Editor
+Zusätzlich wird ein Sensor **Fonrich Meldungen** erzeugt. Beispiele:
 
-## Empfohlenes Sensor-Profil
+- `OK`
+- `Lichtbogen bei Kasten V1, Kanal 02`
+- `Lichtbogen bei Kasten V2, Kanal 05 (Dach West)`
+- `Unterspannung bei Kasten V3`
+- `Kasten V2 offline`
+- mehrere Meldungen werden mit Semikolon zusammengefasst
 
-Für normale PV-/String-Überwachung:
+Die detaillierten Alarm-Rohwerte und vielen einzelnen Alarm-Binary-Sensoren sind im Produktionsprofil standardmässig deaktiviert.
 
-```text
-Sensor-Profil: production
-Watt pro Kanal: ein
-Energie pro Kanal: optional ein
-Alarm-Binary-Sensoren: aus
-Historie: aus
-Alarmmasken: aus
-Lichtbogen-Intensität: aus
-Buttons: aus
-```
+## Neue Dashboard-Karten
 
-Damit werden nicht mehr hunderte unnötige Alarm-Entities erzeugt.
+Die Ressource wird weiterhin automatisch unter folgender stabiler URL registriert:
 
-## Empfohlene HF2211-Einstellung
+`/fonrich_dc_monitor/fonrich-cards.js`
 
-Für die bekannte Anlage empfohlen:
+Im visuellen Karteneditor stehen danach zur Verfügung:
 
-- Protocol: `Modbus`
-- Baudrate: `9600` oder `19200`, gleich wie alle Fonrich-Controller
-- Databits: `8`
-- Stopbits: `1`
-- Parity: `NONE`
-- TCP Server Port: z. B. `4002`
-- maxAccept: `1`
-- Timeout: `30`
-- KeepAlive: `15`
-- Software FlowCtrl: `Disable`
+- **Fonrich Kästen und Kanäle** – alle Kästen und Kanäle in einer modernen Übersicht
+- **Fonrich einzelner Kasten** – ein Kasten, auswählbar über seine Modbus-Adresse
 
-## Installation manuell
+Die Übersicht zeigt Online-Status, Meldungen, Buttons, Gesamtwerte sowie pro Kanal Ampere, Spannung, Leistung und Tagesmaximum.
 
-1. Ordner `custom_components/fonrich_dc_monitor` nach `/config/custom_components/fonrich_dc_monitor` kopieren.
-2. Home Assistant neu starten.
-3. Einstellungen → Geräte & Dienste → Integration hinzufügen → `Fonrich DC Monitor`.
-4. IP/Port eintragen.
-5. Controller-Adressen als Zahlen eintragen, z. B. `240,241,242` oder je Zeile eine Adresse.
-6. Kanalanzahl pro Controller eintragen, z. B. `8` oder bis `24`.
-7. Kanalbeschreibungen eintragen.
-8. Sensor-Profil und Abfrageintervalle wählen.
+## Installation über HACS
 
-## Dashboard Karten
+1. Repository als benutzerdefiniertes Repository in HACS hinzufügen.
+2. Kategorie **Integration** wählen.
+3. Integration installieren.
+4. Home Assistant vollständig neu starten.
+5. Unter **Einstellungen → Geräte & Dienste** die Integration **Fonrich DC Monitor** hinzufügen.
 
-Die Integration bringt diese Datei mit:
+## Empfohlene Einstellungen
 
-```text
-custom_components/fonrich_dc_monitor/www/fonrich-cards.js
-```
+- HF2211 Protocol: `Modbus`
+- Integration: `modbus_tcp_gateway`
+- Baudrate: `9600` oder `19200`, aber identisch an HF2211 und allen Fonrich-Controllern
+- Abfrage Basiswerte: 30 Sekunden
+- Abfrage Meldungen: 15 Sekunden
+- Pause zwischen Requests: 120 ms
+- Pause zwischen Controllern: 250 ms
+- Produktionsprofil
+- Kanalspannung: aktiviert
+- Max. Ampere heute: aktiviert
+- Buttons: aktiviert
 
-Die Integration versucht die Lovelace-Ressource automatisch zu registrieren:
+## Mehrere Controller und Gateways
 
-```text
-/fonrich_dc_monitor/fonrich-cards.js
-```
+- Pro Gateway können beliebig viele Controller mit eindeutigen Modbus-Adressen von 1 bis 247 eingetragen werden.
+- Pro Controller sind 1 bis 24 Kanäle konfigurierbar.
+- Mehrere Gateways werden durch mehrmaliges Hinzufügen der Integration eingerichtet.
 
-Normaler Ablauf nach Installation oder Update:
+## Update von älteren Versionen
 
-1. Home Assistant neu starten.
-2. Dashboard öffnen.
-3. Karte hinzufügen.
-4. Im Visual Editor nach `Fonrich` suchen.
-5. Eine dieser Karten auswählen:
-   - `Fonrich Modern`
-  - `Fonrich Produktion`
-   - `Fonrich Controller Produktion`
-   - `Fonrich String-Leistung`
-   - `Fonrich Energie`
-   - `Fonrich Alarme`
-
-Falls Home Assistant die Ressource auf deiner Version nicht automatisch annimmt, kann sie weiterhin manuell unter Einstellungen → Dashboards → Ressourcen als `JavaScript-Modul` hinzugefügt werden.
-
-## Beispiel
-
-```text
-Host: 192.168.0.41
-Port: 4002
-Controller-Adressen: 240,241,242
-Controller-Namen: V1 / Kasten 1,V2 / Kasten 2,V3 / Kasten 3
-Kanalanzahl: 8 je Controller
-Sensor-Profil: production
-Spannung/Ampere: 30 s
-Watt: 60 s
-Energie: 300 s
-Pause zwischen Requests: 80 ms
-Pause zwischen Controllern: 150 ms
-Max. Register pro Abfrage: 20
-```
-
-## Hinweis zu Protocol und Baudrate
-
-Wenn der HF2211 auf `Protocol = Modbus` steht, muss in der Integration `Modbus TCP Gateway` gewählt werden. Wenn der HF2211 auf `Protocol = NONE/Transparent` steht, muss in der Integration `RTU over TCP / Transparent` gewählt werden.
-
-Die Baudrate wird physisch am HF2211 und an allen Fonrich-Controllern eingestellt. Das Feld in der Integration dokumentiert/validiert die erwartete Bus-Baudrate, ändert den HF2211 aber nicht automatisch. Wenn du auf 19200 wechselst, müssen alle Fonrich-Controller und der HF2211 gleich eingestellt sein.
-
-## Sicherheit
-
-Lichtbogen-/Trip-Alarme sind sicherheitsrelevant. Vor dem Quittieren immer DC-seitig prüfen lassen.
-
-
-
-## 0.6.6
-
-Fix: Prevent duplicate CustomElementRegistry constructor registration errors when Home Assistant loads the card JavaScript twice.
-
-## 0.6.5
-
-- Neue moderne Karte `Fonrich Modern` hinzugefügt.
-- Zeigt Gesamtleistung, Gesamtstrom, aktive Strings, Controller-Kacheln und String-Kacheln.
-- Karte ist im Visual Editor auswählbar als `Fonrich Modern`.
-
-## 0.6.3
-
-Fix: SensorEntityDescription compatibility for newer Home Assistant versions.
-
-
-## v0.6.3
-
-- Lovelace-Karten werden robuster automatisch registriert.
-- Die Integration wartet jetzt, bis Home Assistants Lovelace-Resource-Storage geladen ist, bevor `/fonrich_dc_monitor/fonrich-cards.js` eingetragen wird.
-- Kein manueller Ressourcen-Eintrag nötig, solange Lovelace im Storage/UI-Modus läuft.
-- Im YAML-Lovelace-Modus kann Home Assistant Ressourcen nicht automatisch speichern; dort muss die Resource weiterhin in YAML stehen.
-
-## Version 0.6.3
-
-Fix für Lovelace-Karten:
-
-- Custom elements werden nur noch registriert, wenn sie noch nicht existieren.
-- Dadurch kein Fehler mehr bei doppelt geladener Ressource wie `fonrich-universal-card-editor has already been used`.
-- `window.customCards` wird ohne Duplikate befüllt, damit die Karten im Visual Editor erscheinen.
-
-Nach dem Update bitte alte doppelte Ressourcen entfernen, falls mehr als eine Fonrich-Ressource eingetragen ist, danach Home Assistant neu starten und den Browser hart neu laden.
-
-
-### v0.6.5
-
-- Lovelace-Ressource nutzt jetzt eine stabile URL ohne Versions-Query: `/fonrich_dc_monitor/fonrich-cards.js`.
-- Alte Ressourcen wie `/fonrich_dc_monitor/fonrich-dc-monitor-cards.js?v=...` werden automatisch auf die stabile URL migriert.
-- Doppelte alte Fonrich-Ressourcen werden, wenn möglich, automatisch entfernt.
-- Karten erhalten eindeutigere Namen im Visual Editor, z. B. `Fonrich Modern Produktion` und `Fonrich String Leistung`.
+Beim Update auf 0.7.0 werden ältere Einträge automatisch auf die neue kompakte Darstellung migriert. Die bisherigen Messsensoren behalten soweit möglich ihre eindeutigen IDs. Neue Sensoren für Kanalspannung, Tagesmaximum und Online-Status werden zusätzlich erstellt.
