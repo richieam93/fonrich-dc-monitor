@@ -269,5 +269,5 @@ Lichtbogen-, Trip- und Hauptschalterfunktionen sind sicherheitsrelevant. Elektri
 - Neue Karte **Fonrich Huawei Solarzentrale**.
 - Solar-Energieflusskarte zeigt 3 Wechselrichter und 2 Speicher getrennt.
 - Robuster visueller Editor aus normalen Eingabefeldern und Entity-Vorschlagslisten; Schreiben und Dropdown-Auswahl funktionieren ohne `ha-form`.
-- Schaltfläche **Huawei-Sensoren automatisch eintragen** übernimmt die Entity-IDs der Anlage von Richard Amrein.
+
 
